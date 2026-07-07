@@ -1,0 +1,2533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Market Scanner</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f7f5;
+    --bg3: #f0ede8;
+    --text: #1a1a1a;
+    --text2: #666;
+    --text3: #999;
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.18);
+    --green: #1D9E75;
+    --green-bg: #E1F5EE;
+    --green-text: #0F6E56;
+    --red: #E24B4A;
+    --red-bg: #FCEBEB;
+    --red-text: #A32D2D;
+    --amber: #EF9F27;
+    --amber-bg: #FAEEDA;
+    --amber-text: #854F0B;
+    --blue: #378ADD;
+    --blue-bg: #E6F1FB;
+    --blue-text: #185FA5;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e;
+      --bg2: #2a2a2a;
+      --bg3: #333;
+      --text: #f0f0f0;
+      --text2: #aaa;
+      --text3: #777;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.18);
+      --green-bg: #0a2e20;
+      --green-text: #5DCAA5;
+      --red-bg: #2e0a0a;
+      --red-text: #F09595;
+      --amber-bg: #2e1e00;
+      --amber-text: #FAC775;
+      --blue-bg: #0a1e33;
+      --blue-text: #85B7EB;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg2); color: var(--text); min-height: 100vh; }
+
+  .header { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 18px 28px; display: flex; align-items: center; gap: 14px; }
+  .logo { width: 36px; height: 36px; background: var(--text); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .logo svg { width: 20px; height: 20px; fill: var(--bg); }
+  .header-title h1 { font-size: 18px; font-weight: 600; color: var(--text); }
+  .header-title p { font-size: 12px; color: var(--text2); margin-top: 1px; }
+  .live-dot { display: flex; align-items: center; gap: 5px; margin-left: auto; font-size: 12px; color: var(--green); }
+  .live-dot span { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .main { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
+
+  .controls { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .ctrl-group { display: flex; flex-direction: column; gap: 5px; }
+  .ctrl-label { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+  .seg { display: flex; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); overflow: hidden; }
+  .seg button { padding: 7px 16px; border: none; background: transparent; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .15s; }
+  .seg button.active { background: var(--blue); color: #fff; }
+  .mkt-group { display: flex; gap: 6px; }
+  .mkt-btn { padding: 7px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: transparent; font-size: 13px; color: var(--text2); cursor: pointer; transition: all .15s; }
+  .mkt-btn.active { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+  .scan-btn { margin-left: auto; padding: 9px 24px; border: none; border-radius: var(--radius-sm); background: var(--text); color: var(--bg); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity .15s; }
+  .scan-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .first-scan-btn { padding: 9px 18px; border: 0.5px solid var(--amber); border-radius: var(--radius-sm); background: var(--amber-bg); color: var(--amber-text); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .first-scan-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .scard { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .sval { font-size: 26px; font-weight: 600; }
+  .sval.g { color: var(--green); } .sval.b { color: var(--blue); } .sval.a { color: var(--amber); }
+  .slbl { font-size: 12px; color: var(--text2); margin-top: 3px; }
+
+  .error { background: var(--red-bg); color: var(--red-text); border: 0.5px solid var(--red); border-radius: var(--radius-sm); padding: 14px 18px; font-size: 14px; margin-bottom: 18px; }
+
+  .toast-stack { position: fixed; right: 18px; top: 18px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; max-width: 380px; }
+  .toast { background: var(--bg); border: 0.5px solid var(--border2); border-left: 4px solid var(--blue); box-shadow: 0 8px 24px rgba(0,0,0,.14); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13px; color: var(--text); animation: slideIn .18s ease-out; }
+  .toast.success { border-left-color: var(--green); } .toast.error { border-left-color: var(--red); } .toast.warn { border-left-color: var(--amber); }
+  .toast-title { font-weight: 700; margin-bottom: 3px; } .toast-body { color: var(--text2); line-height: 1.35; }
+  @keyframes slideIn { from { transform: translateY(-6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .engine-status-grid { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 12px; margin: 14px 0 16px; }
+  .engine-status-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 13px 15px; }
+  .engine-status-card .k { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; }
+  .engine-status-card .v { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .engine-status-card .d { font-size: 12px; color: var(--text2); margin-top: 3px; line-height: 1.35; }
+  .status-running { color: var(--green); } .status-stopped { color: var(--amber); } .status-closed { color: var(--red); }
+  @media (max-width: 850px) { .engine-status-grid { grid-template-columns: repeat(2, 1fr); } .toast-stack { left: 14px; right: 14px; max-width: none; } }
+
+  .table-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 18px; }
+  .table-meta { padding: 14px 18px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .table-meta span { font-size: 12px; color: var(--text2); }
+  .table-meta strong { font-size: 13px; font-weight: 600; color: var(--text); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { padding: 11px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; background: var(--bg2); border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+  tbody tr { border-bottom: 0.5px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg2); }
+  td { padding: 13px 14px; vertical-align: top; color: var(--text); }
+
+  .rank-circle { width: 24px; height: 24px; border-radius: 50%; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--text2); }
+  .rank-circle.gold { background: var(--amber-bg); color: var(--amber-text); }
+  .rank-circle.silver { background: var(--bg3); color: var(--text2); }
+  .ticker-name { font-weight: 600; font-size: 14px; }
+  .co-sub { font-size: 11px; color: var(--text2); margin-top: 1px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 8px; background: var(--bg3); color: var(--text2); border: 0.5px solid var(--border); white-space: nowrap; }
+
+  .badge { display: inline-block; padding: 3px 11px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge.BUY { background: var(--green-bg); color: var(--green-text); }
+  .badge.HOLD, .badge.WATCH { background: var(--amber-bg); color: var(--amber-text); }
+  .badge.AVOID { background: var(--red-bg); color: var(--red-text); }
+
+  .gain-pct { font-size: 17px; font-weight: 600; }
+  .gain-pct.up { color: var(--green); } .gain-pct.dn { color: var(--red); } .gain-pct.nu { color: var(--text2); }
+  .rr { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+  .exit-block { font-size: 12px; line-height: 1.9; }
+  .exit-block .tp { color: var(--green); font-weight: 500; }
+  .exit-block .sl { color: var(--red); font-weight: 500; }
+  .exit-block .tp-price, .exit-block .sl-price { color: var(--text2); }
+
+  .conf-wrap { display: flex; flex-direction: column; gap: 5px; }
+  .conf-num { font-size: 13px; font-weight: 600; }
+  .conf-bar-track { height: 4px; background: var(--bg3); border-radius: 2px; width: 80px; }
+  .conf-bar-fill { height: 4px; border-radius: 2px; }
+
+  .indicators { font-size: 11px; color: var(--text2); line-height: 1.8; min-width: 130px; }
+  .indicators b { color: var(--text); font-weight: 500; }
+
+  .reason-cell { font-size: 12px; color: var(--text2); line-height: 1.7; max-width: 240px; }
+  .simple-guide { background: var(--blue-bg); color: var(--blue-text); border: 0.5px solid var(--blue); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-bottom: 16px; }
+  .simple-guide b { color: var(--text); }
+  .plain-main { font-weight: 600; color: var(--text); font-size: 13px; line-height: 1.5; }
+  .plain-sub { color: var(--text2); font-size: 11px; line-height: 1.5; margin-top: 3px; }
+  .action-pill { display:inline-block; padding:4px 9px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .action-pill.boost { background:var(--green-bg); color:var(--green-text); }
+  .action-pill.penalty { background:var(--red-bg); color:var(--red-text); }
+  .action-pill.neutral { background:var(--bg3); color:var(--text2); }
+
+  .loading-row td { padding: 3rem; text-align: center; color: var(--text2); }
+  .loading-inner { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .big-spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+
+  .disclaimer { font-size: 11px; color: var(--text3); line-height: 1.7; padding: 14px 18px; background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-sm); }
+  .methodology-card { display:none; background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 20px; }
+  .methodology-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+  .funnel-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .funnel-step { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 9px 10px; }
+  .funnel-step b { display:block; font-size: 15px; color: var(--text); }
+  .funnel-step span { display:block; font-size: 10px; color: var(--text2); margin-top: 2px; text-transform: uppercase; letter-spacing:.04em; }
+  .methodology-list { color: var(--text2); font-size: 12px; line-height: 1.75; }
+  .cache-pill { margin-left:auto; font-size:11px; padding:3px 8px; border-radius:999px; background:var(--blue-bg); color:var(--blue-text); }
+  @media (max-width: 1000px) { .funnel-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 640px) { .funnel-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  @media (max-width: 768px) {
+    .summary { grid-template-columns: repeat(2, 1fr); }
+    .controls { gap: 10px; }
+    .scan-btn { width: 100%; justify-content: center; }
+    .first-scan-btn { width: 100%; justify-content: center; }
+  }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 18px; border-bottom: 0.5px solid var(--border); }
+  .tab-btn { padding: 10px 16px; border: none; background: transparent; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+
+  .acc-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .acc-outcome { font-weight: 600; }
+  .acc-outcome.correct { color: var(--green); }
+  .acc-outcome.wrong { color: var(--red); }
+  .acc-empty { padding: 3rem; text-align: center; color: var(--text2); font-size: 13px; }
+  .track-actions { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .secondary-btn { border:0.5px solid var(--border); background:var(--bg); color:var(--text); border-radius:var(--radius-sm); padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .secondary-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .cost-note { font-size:12px; color:var(--text2); line-height:1.6; margin-bottom:18px; }
+  .trade-grid { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:12px; margin-bottom:16px; }
+  .field { background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; }
+  .field label { display:block; font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  .field input, .field select { width:100%; border:0.5px solid var(--border2); border-radius:8px; padding:8px 9px; font-size:13px; background:var(--bg); color:var(--text); }
+  .trade-warning { background:var(--amber-bg); color:var(--amber-text); border:0.5px solid var(--amber); border-radius:var(--radius-sm); padding:12px 14px; font-size:12px; line-height:1.6; margin-bottom:16px; }
+  @media (max-width: 900px) { .trade-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .trade-grid { grid-template-columns: 1fr; } }
+
+  @media (max-width: 768px) {
+    .acc-summary { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+</head>
+<body>
+<div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+
+<div class="header">
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm2 10l3-4 2.5 3L15 9l3 6H7z"/></svg>
+  </div>
+  <div class="header-title">
+    <h1>AI Market Scanner</h1>
+    <p>Locked predictions · PostgreSQL cache · Transparent ranking</p>
+  </div>
+  <div class="live-dot"><span></span> Cached</div>
+</div>
+
+<div class="main">
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabScanner" onclick="switchTab('scanner')">Scanner</button>
+    <button class="tab-btn" id="tabAccuracy" onclick="switchTab('accuracy')">Track Record</button>
+    <button class="tab-btn" id="tabCosts" onclick="switchTab('costs')">API Costs</button>
+    <button class="tab-btn" id="tabResearch" onclick="switchTab('research')">Research Lab</button>
+    <button class="tab-btn" id="tabTrading" onclick="switchTab('trading')">Trading Automation</button>
+    <button class="tab-btn" id="tabIntraday" onclick="switchTab('intraday')">Intraday Engine</button>
+    <button class="tab-btn" id="tabHistory" onclick="switchTab('history')">Trade History</button>
+    <button class="tab-btn" id="tabExport" onclick="switchTab('export')">Export Data</button>
+  </div>
+
+  <div id="scannerView">
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-label">Horizon</div>
+      <div class="seg">
+        <button class="active" id="hDay" onclick="setH('day')">Daily</button>
+        <button id="hWeek" onclick="setH('week')">Weekly</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">Market</div>
+      <div class="mkt-group">
+        <button class="mkt-btn active" id="mUS" onclick="setM('US')">🇺🇸 US</button>
+        <button class="mkt-btn" id="mIN" onclick="setM('IN')">🇮🇳 India</button>
+        <button class="mkt-btn" id="mGlobal" onclick="setM('Global')">🌐 Global</button>
+      </div>
+    </div>
+    <button class="scan-btn" id="scanBtn" onclick="runScan()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      <span id="btnTxt">Load Cached Scan</span>
+    </button>
+    <button class="first-scan-btn" id="firstScanBtn" onclick="startFirstScan()" title="Safe initializer: creates the first locked prediction only when none exists for this market/horizon.">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.6 6.9L22 9.3l-5.7 4.5L18.1 21 12 17.1 5.9 21l1.8-7.2L2 9.3l7.4-.4L12 2z"/></svg>
+      <span id="firstScanTxt">Run First Scan</span>
+    </button>
+  </div>
+
+  <div id="summaryBar" class="summary" style="display:none;">
+    <div class="scard"><div class="sval b" id="scTotal">—</div><div class="slbl">Universe scanned</div></div>
+    <div class="scard"><div class="sval g" id="scBuy">—</div><div class="slbl">Buy signals</div></div>
+    <div class="scard"><div class="sval g" id="scGain">—</div><div class="slbl">Deep analysis candidates</div></div>
+    <div class="scard"><div class="sval a" id="scRR">—</div><div class="slbl">Cache age</div></div>
+  </div>
+
+  <div id="methodologyCard" class="methodology-card">
+    <div class="methodology-title">Transparent scanning funnel</div>
+    <div class="funnel-grid" id="funnelGrid"></div>
+    <div class="methodology-list" id="methodologyList"></div>
+  </div>
+
+  <div id="errBox" class="error" style="display:none;"></div>
+
+  <div id="tableCard" class="table-card" style="display:none;">
+    <div class="table-meta">
+      <strong id="tableMeta">Top picks</strong>
+      <span id="tableTs"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Stock</th>
+            <th>Signal</th>
+            <th>Predicted gain</th>
+            <th>Take profit / Stop loss</th>
+            <th>Confidence</th>
+            <th>Indicators</th>
+            <th>Reasoning</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+⚠️ Disclaimer: This tool is for informational and educational purposes only. Results are locked from a precomputed background scan using public technical, fundamental, and headline-sentiment frameworks. On later scan requests, due predictions are checked once for track-record accuracy and then marked checked. The app does not claim to follow or replicate any certified financial adviser’s proprietary methodology and is not financial advice. Trading automation is disabled/paper by default and must not be marketed as guaranteed returns.
+  </div>
+
+  </div>
+
+  <div id="accuracyView" style="display:none;">
+
+    <div class="track-actions">
+      <button class="secondary-btn" id="checkDueBtn" onclick="checkDuePredictions()">✓ Check due predictions after close</button>
+      <button class="secondary-btn" onclick="loadAccuracy()">↻ Refresh track record</button>
+    </div>
+    <div class="cost-note" id="checkMsg">Predictions are verified only after the relevant exchange close plus a safety delay. If the horizon is still active, the system skips checking.</div>
+
+    <div class="acc-summary" id="accSummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="accChecked">—</div><div class="slbl">Predictions checked</div></div>
+      <div class="scard"><div class="sval g" id="accWinRate">—</div><div class="slbl">Win rate</div></div>
+      <div class="scard"><div class="sval a" id="accPending">—</div><div class="slbl">Pending</div></div>
+      <div class="scard"><div class="sval b" id="accAvgActual">—</div><div class="slbl">Avg actual gain</div></div>
+      <div class="scard"><div class="sval b" id="accAvgError">—</div><div class="slbl">Avg prediction error</div></div>
+    </div>
+
+    <div class="table-card" id="accBreakdownCard" style="display:none;">
+      <div class="table-meta"><strong>Win rate by market &amp; horizon</strong></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Market</th><th>Horizon</th><th>Checked</th><th>Correct</th><th>Wrong</th><th>Neutral</th><th>Pending</th><th>Win rate</th></tr></thead>
+          <tbody id="accBreakdownBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-meta"><strong>Recent scored predictions</strong></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Stock</th><th>Market</th><th>Signal</th><th>Entry</th><th>Predicted</th><th>Actual</th><th>Outcome</th><th>Learning</th><th>Checked</th></tr>
+          </thead>
+          <tbody id="accRecentBody">
+            <tr class="loading-row"><td colspan="9"><div class="acc-empty">Loading track record...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:18px;">
+Every completed scan's cached top picks are locked for their period and can be checked against real prices only after the selected horizon's exchange close. WATCH signals are not treated like BUY trades; they are scored as Correct Watch, Neutral Watch, or Missed Opportunity.
+    </div>
+
+  </div>
+
+  <div id="costsView" style="display:none;">
+    <div class="track-actions">
+      <button class="secondary-btn" onclick="loadCosts()">↻ Refresh costs</button>
+    </div>
+    <div class="acc-summary" id="costSummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="costCalls">—</div><div class="slbl">Paid AI calls made</div></div>
+      <div class="scard"><div class="sval g" id="costInr">—</div><div class="slbl">Total spent INR</div></div>
+      <div class="scard"><div class="sval b" id="costTokens">—</div><div class="slbl">Tokens used</div></div>
+      <div class="scard"><div class="sval a" id="nextCost">—</div><div class="slbl">Estimated next first scan</div></div>
+      <div class="scard"><div class="sval g" id="cachedCost">₹0</div><div class="slbl">Load cached scan</div></div>
+      <div class="scard"><div class="sval b" id="aiBudgetStatus">—</div><div class="slbl">AI budget guard</div></div>
+    </div>
+    <div class="cost-note" id="costNote">Cached scans cost ₹0. First Scan costs ₹0 if the current prediction is already locked; otherwise it can make one paid Claude ranking call.</div>
+    <div class="table-card" id="costDailyCard" style="display:none;">
+      <div class="table-meta"><strong>Daily API cost breakdown</strong><span>Grouped by IST date</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Calls</th><th>Input</th><th>Output</th><th>Cost</th><th>Call types</th></tr></thead>
+          <tbody id="costDailyBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="table-card" id="costTypeCard" style="display:none;">
+      <div class="table-meta"><strong>Cost by feature</strong><span>Scanner vs Claude intraday control</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Feature/call</th><th>Calls</th><th>Input</th><th>Output</th><th>Cost</th><th>Last call</th></tr></thead>
+          <tbody id="costTypeBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="table-card" id="costTableCard" style="display:none;">
+      <div class="table-meta"><strong>Recent paid API calls</strong></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>Call</th><th>Market</th><th>Model</th><th>Input</th><th>Output</th><th>Cost</th></tr></thead>
+          <tbody id="costRecentBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tradingView" style="display:none;">
+    <div class="trade-warning">
+      Trading automation is paper/assisted by default. Live broker execution stays blocked unless the server owner explicitly enables LIVE_TRADING_ENABLED and connects a compliant broker API/webhook. Do not promise guaranteed returns.
+    </div>
+    <div class="track-actions">
+      <button class="secondary-btn" onclick="loadTrading()">↻ Refresh trading</button>
+      <button class="secondary-btn" onclick="saveTradingSettings()">Save settings</button>
+      <button class="secondary-btn" id="runTradingBtn" onclick="runTradingAutomation()">▶ Run automation on locked scan</button>
+      <button class="secondary-btn" onclick="runPaperAutoOnce()">⚙ Run full paper cycle</button>
+      <button class="secondary-btn" onclick="startPaperAuto()">▶ Start paper auto</button>
+      <button class="secondary-btn" onclick="stopPaperAuto()">■ Stop paper auto</button>
+    </div>
+    <div class="trade-grid">
+      <div class="field"><label>Enable automation</label><select id="trEnabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></div>
+      <div class="field"><label>Mode</label><select id="trMode"><option value="paper">Paper trading</option><option value="assisted">Assisted / confirm first</option><option value="live">Live broker mode</option></select></div>
+      <div class="field"><label>India paper capital ₹</label><input id="trCapital" type="number" min="0" step="100" value="5000"><small>Used for NSE/BSE simulation sizing.</small></div>
+      <div class="field"><label>US paper capital $</label><input id="trCapitalUsd" type="number" min="0" step="100" value="1000"><small>Used for America simulation sizing.</small></div>
+      <div class="field"><label>Max open positions</label><input id="trMaxOpen" type="number" min="1" max="20" value="3"></div>
+      <div class="field"><label>Max position %</label><input id="trMaxPos" type="number" min="1" max="100" step="1" value="25"></div>
+      <div class="field"><label>Risk per trade %</label><input id="trRisk" type="number" min="0.1" max="20" step="0.1" value="2"></div>
+      <div class="field"><label>Min confidence</label><input id="trConf" type="number" min="1" max="99" value="65"></div>
+      <div class="field"><label>Min R/R</label><input id="trRR" type="number" min="0.1" max="10" step="0.1" value="1.5"></div>
+      <div class="field"><label>Weekly profit target %</label><input id="trWeeklyTarget" type="number" min="0" max="100" step="0.5" value="10"></div>
+      <div class="field"><label>Max weekly loss %</label><input id="trWeeklyLoss" type="number" min="0.5" max="50" step="0.5" value="4"></div>
+      <div class="field"><label>Cover API cost from profit</label><select id="trCoverApi"><option value="true">Yes - net profit only</option><option value="false">No - gross P/L</option></select></div>
+      <div class="field"><label>Broker/API monthly cost ₹</label><input id="trBrokerApiCost" type="number" min="0" step="1" value="0"></div>
+      <div class="field"><label>Use weekly target as hard ceiling</label><select id="trStopTarget"><option value="false">No - keep trading strong setups</option><option value="true">Yes - pause at target</option></select></div>
+      <div class="field"><label>Opening confirmation</label><select id="trOpenConfirm"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
+      <div class="field"><label>Opening wait minutes</label><input id="trOpenWait" type="number" min="0" max="60" step="1" value="15"></div>
+      <div class="field"><label>Max chase above entry %</label><input id="trMaxChase" type="number" min="0" max="10" step="0.1" value="1.25"></div>
+      <div class="field"><label>Max pullback below entry %</label><input id="trMaxPullback" type="number" min="0" max="10" step="0.1" value="1"></div>
+      <div class="field"><label>Profit protection</label><select id="trProfitProtect"><option value="true">Enabled</option><option value="false">Disabled</option></select></div>
+      <div class="field"><label>Protect after target progress %</label><input id="trProtectProgress" type="number" min="5" max="100" step="1" value="50"></div>
+      <div class="field"><label>Trail activates at progress %</label><input id="trTrailActivate" type="number" min="5" max="100" step="1" value="40"></div>
+      <div class="field"><label>Trailing giveback %</label><input id="trTrailGiveback" type="number" min="5" max="95" step="1" value="35"></div>
+      <div class="field"><label>Max validity exit at horizon end</label><select id="trExitHorizon"><option value="true">Yes</option><option value="false">No</option></select></div>
+    </div>
+    <div class="cost-note" id="tradingNote">Claude is not called for main buy/sell execution unless you explicitly enable Claude-assisted modes. Horizon is only the maximum validity window, not a forced holding period. The post-entry risk recheck protects capital/profit: it holds winners unless weakening appears, tightens stops on moderate risk, and exits only when multiple risk/weakness signals are confirmed.</div>
+    <div class="cost-note" id="paperAutoNote">Paper auto scheduler can check daily/week and intraday markets automatically. It is paper-only and keeps daily/week learning separate from intraday learning.</div>
+    <div class="cost-note">
+      <strong>Full paper cycle:</strong> one manual paper-only check that first updates exits/profit/loss, then scans daily/week and intraday engines for new eligible paper trades. It does not use real money. If Claude intraday control is enabled, Claude may review paper entries, but hard cost/risk gates still decide whether an order can be recorded.
+    </div>
+    <div class="engine-status-grid" id="paperAutoStatusGrid">
+      <div class="engine-status-card"><div class="k">Paper auto</div><div class="v" id="paperAutoRunning">—</div><div class="d" id="paperAutoRunningDetail">—</div></div>
+      <div class="engine-status-card"><div class="k">Last checked</div><div class="v" id="paperAutoLastChecked">—</div><div class="d" id="paperAutoLastMsg">—</div></div>
+      <div class="engine-status-card"><div class="k">Next check</div><div class="v" id="paperAutoNextCheck">—</div><div class="d" id="paperAutoInterval">—</div></div>
+      <div class="engine-status-card"><div class="k">Market condition</div><div class="v" id="paperAutoMarketState">—</div><div class="d" id="paperAutoMarketDetail">—</div></div>
+    </div>
+
+    <div class="table-card" id="paperAutoRunsCard" style="display:none; margin-top:14px;">
+      <div class="table-meta"><strong>Paper auto cycle history</strong><span>Recent 20 rows only, including closed-market skipped cycles</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Checked at</th><th>Trigger</th><th>Daily/week</th><th>Intraday</th><th>Orders</th><th>Exits</th><th>Skipped</th><th>Message</th></tr></thead>
+        <tbody id="paperAutoRunsBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="acc-summary" id="tradeSummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="tradeOpen">—</div><div class="slbl">Open positions</div></div>
+      <div class="scard"><div class="sval g" id="tradePnl">—</div><div class="slbl">Realised paper P/L</div></div>
+      <div class="scard"><div class="sval a" id="tradeMode">—</div><div class="slbl">Current mode</div></div>
+      <div class="scard"><div class="sval b" id="tradeBroker">—</div><div class="slbl">Broker configured</div></div>
+      <div class="scard"><div class="sval g" id="tradeWeekNet">—</div><div class="slbl">Weekly net after API</div></div>
+      <div class="scard"><div class="sval b" id="tradeGoal">—</div><div class="slbl">Weekly target progress</div></div>
+      <div class="scard"><div class="sval a" id="tradeApiCover">—</div><div class="slbl">API cost covered</div></div>
+      <div class="scard"><div class="sval b" id="tradeGuard">—</div><div class="slbl">Goal guard</div></div>
+      <div class="scard"><div class="sval a" id="tradeWeeklyCost">—</div><div class="slbl">Weekly API cost</div></div>
+      <div class="scard"><div class="sval b" id="tradeOpeningState">—</div><div class="slbl">Opening gate</div></div>
+      <div class="scard"><div class="sval g" id="tradeExitEngine">—</div><div class="slbl">Exit engine</div></div>
+    </div>
+
+    <div class="table-card" id="positionsCard" style="display:none;">
+      <div class="table-meta"><strong>Positions</strong></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stock</th><th>Market</th><th>Qty</th><th>Entry</th><th>Target</th><th>Stop</th><th>Status</th><th>P/L</th></tr></thead>
+        <tbody id="positionsBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="entryChecksCard" style="display:none;">
+      <div class="table-meta"><strong>Entry checks / skipped reasons</strong><span>Shows why a BUY was approved or blocked, including insufficient simulation capital.</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stock</th><th>Decision</th><th>Reason</th><th>Price</th><th>Trend</th></tr></thead>
+        <tbody id="entryChecksBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="tradingRunLogsCard" style="display:none; margin-top:14px;">
+      <div class="table-meta"><strong>Trading automation check history</strong><span>Recent 20 rows only, same idea as Intraday auto/check history</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Checked at</th><th>Trigger</th><th>Market</th><th>Horizon</th><th>Mode</th><th>Session</th><th>Checks</th><th>Approved</th><th>Orders</th><th>Exits</th><th>Message</th></tr></thead>
+        <tbody id="tradingRunLogsBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="ordersCard" style="display:none;">
+      <div class="table-meta"><strong>Recent automation orders</strong></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Stock</th><th>Side</th><th>Qty</th><th>Limit</th><th>Status</th><th>Mode</th><th>Risk note</th></tr></thead>
+        <tbody id="ordersBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:18px;">
+Automation is a risk-control and execution workflow, not an assurance of profit. For Indian markets, API/algo orders should be routed through a compliant broker/exchange-approved setup with audit trail and applicable approvals.
+    </div>
+  </div>
+
+  <div id="intradayView" style="display:none;">
+    <div class="trade-warning">
+      Intraday Engine is separate from the AI scanner. It looks for live bullish setups after the opening wait window, applies hard cost/risk gates first, and can optionally let Claude review or control paper entries from already-safe candidates. Claude cannot bypass stop-loss, cost coverage, max trades, fresh-data, or loss guards.
+    </div>
+    <div class="track-actions">
+      <button class="secondary-btn" onclick="loadIntraday()">↻ Refresh intraday</button>
+      <button class="secondary-btn" onclick="saveIntradaySettings()">Save intraday settings</button>
+      <button class="secondary-btn" id="runIntradayBtn" onclick="runIntradayEngine()">⚡ Run once now</button>
+      <button class="secondary-btn" id="startIntraAutoBtn" onclick="startIntradayAuto()">▶ Start auto</button>
+      <button class="secondary-btn" id="stopIntraAutoBtn" onclick="stopIntradayAuto()">■ Stop auto</button>
+    </div>
+    <div class="trade-grid">
+      <div class="field"><label>Enable intraday engine</label><select id="intraEnabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></div>
+      <div class="field"><label>Intraday market</label><select id="intraMarket"><option value="IN">India NSE</option><option value="US">US</option><option value="Global">Global</option></select></div>
+      <div class="field"><label>Intraday mode</label><select id="intraExecutionMode"><option value="paper">Paper / simulation</option><option value="assisted">Assisted / confirm first</option><option value="live">Live broker mode</option></select></div>
+      <div class="field"><label>Claude control mode</label><select id="intraClaudeMode"><option value="off">Off</option><option value="review_only">Review only</option><option value="approval_required">Approval required</option><option value="paper_full_control">Paper full control</option></select><small>Full control is paper-only. Live/assisted still requires engine safety gates and confirmation.</small></div>
+      <div class="field"><label>Claude max reviews/run</label><input id="intraClaudeMaxReviews" type="number" min="0" max="10" step="1" value="5"><small>Only top already-safe plans are sent to Claude.</small></div>
+      <div class="field"><label>Claude min approval confidence</label><input id="intraClaudeMinConfidence" type="number" min="0" max="100" step="1" value="70"><small>Approval/full-control trades need ALLOW above this confidence.</small></div>
+      <div class="field"><label>Claude target instruction</label><input id="intraClaudeTarget" type="text" maxlength="1200" value="Maximize net expectancy after all costs. Prefer no trade over a weak trade."><small>Tell Claude the trading objective, but hard risk gates still win.</small></div>
+      <div class="field"><label>Intraday India paper capital ₹</label><input id="intraSimCapital" type="number" min="100" max="100000000" step="100" value="5000"><small>Used for NSE/BSE intraday paper sizing.</small></div>
+      <div class="field"><label>Intraday US paper capital $</label><input id="intraSimCapitalUsd" type="number" min="10" max="100000000" step="100" value="1000"><small>Used for America intraday paper sizing.</small></div>
+      <div class="field"><label>Confirm first</label><select id="intraConfirm"><option value="true">Yes</option><option value="false">No</option></select></div>
+      <div class="field"><label>Auto-run</label><select id="intraAutoEnabled"><option value="false">Manual only</option><option value="true">Automatic</option></select></div>
+      <div class="field"><label>Auto interval seconds</label><input id="intraAutoInterval" type="number" min="30" max="3600" step="30" value="300"></div>
+      <div class="field"><label>Opening wait minutes</label><input id="intraOpenWait" type="number" min="0" max="90" step="1" value="15"></div>
+      <div class="field"><label>Universe limit</label><input id="intraUniverse" type="number" min="10" max="300" step="5" value="60"></div>
+      <div class="field"><label>Max candidates</label><input id="intraMaxCandidates" type="number" min="1" max="30" step="1" value="8"></div>
+      <div class="field"><label>Minimum score</label><input id="intraScore" type="number" min="1" max="99" step="1" value="70"></div>
+      <div class="field"><label>Price/cost focus</label><select id="intraPriceFilter"><option value="true">Enabled</option><option value="false">Disabled</option></select><small>Uses separate NSE and US price bands. Blocks high-price qty-1 trades and very cheap weak names.</small></div>
+      <div class="field"><label>India min stock price ₹</label><input id="intraMinStockPriceInr" type="number" min="0" max="1000000" step="1" value="50"></div>
+      <div class="field"><label>India max stock price ₹</label><input id="intraMaxStockPriceInr" type="number" min="0" max="1000000" step="1" value="1500"></div>
+      <div class="field"><label>India min position value ₹</label><input id="intraMinPositionValueInr" type="number" min="0" max="100000000" step="100" value="10000"><small>NSE trades must have enough value to cover costs.</small></div>
+      <div class="field"><label>US min stock price $</label><input id="intraMinStockPriceUsd" type="number" min="0" max="1000000" step="1" value="2"></div>
+      <div class="field"><label>US max stock price $</label><input id="intraMaxStockPriceUsd" type="number" min="0" max="1000000" step="1" value="250"></div>
+      <div class="field"><label>US min position value $</label><input id="intraMinPositionValueUsd" type="number" min="0" max="100000000" step="25" value="500"><small>US trades use separate USD cost-efficiency rules.</small></div>
+      <div class="field"><label>Min order quantity</label><input id="intraMinOrderQty" type="number" min="1" max="1000000" step="1" value="5"><small>Avoids qty 1–2 high-price trades.</small></div>
+      <div class="field"><label>Min move from open %</label><input id="intraMinMove" type="number" min="0" max="20" step="0.05" value="0.35"></div>
+      <div class="field"><label>Max chase %</label><input id="intraMaxChase" type="number" min="0.1" max="20" step="0.1" value="3"></div>
+      <div class="field"><label>Require above VWAP</label><select id="intraVWAP"><option value="true">Yes</option><option value="false">No</option></select></div>
+      <div class="field"><label>Require opening breakout</label><select id="intraBreakout"><option value="true">Yes</option><option value="false">No</option></select></div>
+      <div class="field"><label>Min volume multiplier</label><input id="intraVolume" type="number" min="0" max="10" step="0.1" value="1.2"></div>
+      <div class="field"><label>Quick target %</label><input id="intraTarget" type="number" min="0.05" max="20" step="0.05" value="0.8"></div>
+      <div class="field"><label>Max stop-loss %</label><input id="intraStop" type="number" min="0.05" max="10" step="0.05" value="0.6"></div>
+      <div class="field"><label>Min R/R</label><input id="intraRR" type="number" min="0.2" max="10" step="0.1" value="1.2"></div>
+      <div class="field"><label>India min expected NET profit ₹</label><input id="intraMinExpectedNetInr" type="number" min="0" max="10000000" step="10" value="50"><small>Entry blocked unless target profit covers all estimated costs plus this net buffer.</small></div>
+      <div class="field"><label>US min expected NET profit $</label><input id="intraMinExpectedNetUsd" type="number" min="0" max="1000000" step="0.5" value="1"><small>Separate US cost gate.</small></div>
+      <div class="field"><label>Minimum gross profit / cost ratio</label><input id="intraProfitCostRatio" type="number" min="0" max="20" step="0.1" value="1.5"><small>Example: 1.5 means target gross profit must be at least 1.5× estimated total trade cost.</small></div>
+      <div class="field"><label>Max intraday trades/day</label><input id="intraMaxTrades" type="number" min="1" max="50" step="1" value="3"></div>
+      <div class="field"><label>Book profit if fading after %</label><input id="intraProfitBook" type="number" min="0.05" max="20" step="0.05" value="0.45"></div>
+      <div class="field"><label>Force exit before close min</label><input id="intraForceExit" type="number" min="1" max="120" step="1" value="15"></div>
+    </div>
+    <div class="cost-note" id="intradayNote">Intraday Engine scans live bullish stocks and can create paper/assisted/live orders only if Trading Automation is enabled and portfolio guards allow entries. Paper simulation capital is controlled above.</div>
+    <div class="cost-note" id="intradayDataSource">Market data source will appear here after the engine loads.</div>
+    <div class="cost-note" id="intradayLastRun">Latest intraday engine check statistics will appear here after manual or auto run.</div>
+    <div class="engine-status-grid" id="intradayStatusGrid">
+      <div class="engine-status-card"><div class="k">Intraday auto</div><div class="v" id="intraAutoProminent">—</div><div class="d" id="intraAutoDetail">—</div></div>
+      <div class="engine-status-card"><div class="k">Session condition</div><div class="v" id="intraSessionProminent">—</div><div class="d" id="intraSessionDetail">—</div></div>
+      <div class="engine-status-card"><div class="k">Last checked</div><div class="v" id="intraLastCheckedProminent">—</div><div class="d" id="intraLastCheckMsg">—</div></div>
+      <div class="engine-status-card"><div class="k">Latest cycle</div><div class="v" id="intraLatestCycle">—</div><div class="d" id="intraLatestCycleDetail">—</div></div>
+    </div>
+
+    <div class="table-card" id="intradayExpectancyCard" style="display:block; margin-top:14px;">
+      <div class="table-meta"><strong>Intraday expectancy after costs</strong><span>Uses net P&amp;L after estimated brokerage/STT/taxes/slippage. Gross wins that do not cover costs count as losses.</span></div>
+      <div class="engine-status-grid">
+        <div class="engine-status-card"><div class="k">Net P&amp;L</div><div class="v" id="intraExpNetPnl">—</div><div class="d" id="intraExpGrossCost">—</div></div>
+        <div class="engine-status-card"><div class="k">Win rate</div><div class="v" id="intraExpWinRate">—</div><div class="d" id="intraExpTrades">—</div></div>
+        <div class="engine-status-card"><div class="k">Avg net trade</div><div class="v" id="intraExpAvgNet">—</div><div class="d" id="intraExpAvgWinLoss">—</div></div>
+        <div class="engine-status-card"><div class="k">Profit factor</div><div class="v" id="intraExpProfitFactor">—</div><div class="d" id="intraExpPolicy">—</div></div>
+      </div>
+      <div class="cost-note" id="intradayExpectancyNote">Expectancy dashboard will appear after closed trades exist.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Exit reason</th><th>Trades</th><th>Net P/L</th><th>Gross P/L</th><th>Costs</th><th>Avg net</th></tr></thead>
+        <tbody id="intradayExpectancyExitBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="intradayAutoRunsCard" style="display:none; margin-top:14px;">
+      <div class="table-meta"><strong>Intraday auto/check history</strong><span>Every manual/auto cycle with time, scan count, and result</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Checked at</th><th>Trigger</th><th>Market</th><th>Source</th><th>Session</th><th>Scanned</th><th>Eligible</th><th>Orders</th><th>Message</th></tr></thead>
+        <tbody id="intradayAutoRunsBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="acc-summary" id="intradaySummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="intraSession">—</div><div class="slbl">Session state</div></div>
+      <div class="scard"><div class="sval g" id="intraFound">—</div><div class="slbl">Eligible bullish setups</div></div>
+      <div class="scard"><div class="sval a" id="intraOrders">—</div><div class="slbl">Orders created</div></div>
+      <div class="scard"><div class="sval b" id="intraWeekGuard">—</div><div class="slbl">Weekly guard</div></div>
+      <div class="scard"><div class="sval g" id="intraNet">—</div><div class="slbl">Weekly net after API</div></div>
+      <div class="scard"><div class="sval b" id="intraMode">—</div><div class="slbl">Trading mode</div></div>
+      <div class="scard"><div class="sval a" id="intraAutoState">—</div><div class="slbl">Auto engine</div></div>
+    </div>
+
+    <div class="table-card" id="intradayCandidatesCard" style="display:none;">
+      <div class="table-meta"><strong>Bullish intraday candidates</strong><span>Live intraday candles · deterministic rules</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stock</th><th>Score</th><th>Move</th><th>Last</th><th>VWAP</th><th>Breakout</th><th>Volume</th><th>Trend</th><th>Source</th><th>Blocked reasons</th></tr></thead>
+        <tbody id="intradayCandidatesBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="intradayPositionsCard" style="display:none;">
+      <div class="table-meta"><strong>Intraday positions</strong></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stock</th><th>Qty</th><th>Entry</th><th>Target</th><th>Stop</th><th>Status</th><th>P/L</th></tr></thead>
+        <tbody id="intradayPositionsBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="intradayOrdersCard" style="display:none;">
+      <div class="table-meta"><strong>Intraday orders</strong></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Stock</th><th>Side</th><th>Qty</th><th>Entry</th><th>Status</th><th>Mode</th><th>Note</th></tr></thead>
+        <tbody id="intradayOrdersBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:18px;">
+Intraday trading is high risk. This engine is for controlled paper/assisted testing first. Live broker execution should only be enabled after verified paper performance, strict loss limits, and compliant broker/API setup.
+    </div>
+
+  </div>
+
+
+  <div id="researchView" style="display:none;">
+    <div class="trade-warning">
+      Research Lab checks the strategy on old market days before you trust it on new days. It does not show tomorrow’s picks. It shows what worked, what failed, and what the system should avoid or boost in future scans.
+    </div>
+    <div class="track-actions">
+      <button class="secondary-btn" onclick="loadResearch()">↻ Refresh research</button>
+      <button class="scan-btn" id="runBacktestBtn" onclick="runBacktest()">Run Backtest</button>
+      <button class="secondary-btn" id="compareLearningBtn" onclick="compareLearning()">⇄ Compare Raw vs Learned (same window)</button>
+      <button class="secondary-btn" onclick="switchTab('export'); loadExportManifest();">Export all research/data</button>
+      <button class="secondary-btn" onclick="downloadFullExport('zip')">⬇ ZIP backup</button>
+      <div class="field"><label>Market</label><select id="btMarket"><option value="IN">India</option><option value="US">US</option><option value="Global">Global</option></select></div>
+      <div class="field"><label>Horizon</label><select id="btHorizon"><option value="day">Day</option><option value="week">Week</option></select></div>
+      <div class="field"><label>Quality stocks to scan</label><input id="btUniverse" type="number" value="40" min="5" max="300"></div>
+      <div class="field"><label>Best stocks picked per test</label><input id="btTopN" type="number" value="5" min="1" max="20"></div>
+      <div class="field"><label>Run old test every X days</label><input id="btStep" type="number" value="5" min="1" max="30"></div>
+      <div class="field">
+        <label>Backtest mode</label>
+        <select id="btLearningMode">
+          <option value="raw">Raw (ignore learning)</option>
+          <option value="learned">Learned (apply everything learned so far)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>History to test</label>
+        <select id="btLookback" onchange="toggleCustomDateRange()">
+          <option value="1">Last 1 year</option>
+          <option value="3" selected>Last 3 years</option>
+          <option value="5">Last 5 years</option>
+          <option value="7">Last 7 years</option>
+          <option value="10">Last 10 years</option>
+          <option value="custom">Custom range...</option>
+        </select>
+      </div>
+      <div class="field" id="btCustomStartWrap" style="display:none;"><label>Start date</label><input id="btStartDate" type="date"></div>
+      <div class="field" id="btCustomEndWrap" style="display:none;"><label>End date</label><input id="btEndDate" type="date"></div>
+    </div>
+    <div class="cost-note" id="researchNote">Backtest = past simulation only. It checks old market days, records what would have worked, and builds lessons for future scans. It does not show tomorrow’s stock list.</div>
+    <div class="simple-guide" style="margin-top:12px;">
+      <b>How much history is enough?</b> More trades per pattern gives a more trustworthy win rate (roughly ±18% margin of error at 8 trades vs ±5% at 100 trades), but calendar length matters separately: a strategy also needs to be tested across a real bull run, a choppy/sideways stretch, and ideally a real correction/bear phase, not just one market mood. 3 years is a reasonable starting minimum; 5-10 years gives a better chance of covering multiple regimes, though very old data for some symbols may be thinner or less reliable.
+    </div>
+    <div class="simple-guide" style="margin-top:12px;">
+      <b>Data correctness for splits/bonus issues:</b> Backtests fetch each stock's corporate-action history alongside prices. A confirmed stock split or bonus issue (common on NSE/BSE) is detected and excluded both from the data-integrity check and from any simulated trade whose holding window would straddle it, so a real split cannot be mistaken for a fake crash or a fake stop-loss hit.
+    </div>
+    <div class="simple-guide" style="margin-top:12px;">
+      <b>Raw vs Learned:</b> Raw replays the base strategy exactly as coded, with no pattern-memory or per-stock history applied — this is the honest control/baseline. Learned re-scores and filters the same test days using every lesson the system has recorded so far (pattern penalties, regime weighting, per-stock strength). Use "Compare Raw vs Learned" to run both on the identical window and see whether learning actually improved the result, and by how much. There is no target of a perfect win rate here — a small, consistent, positive edge across many trades (profit factor above 1.0, held up across regimes) is the realistic goal.
+    </div>
+    <div class="table-card" id="learningCompareCard" style="display:none;">
+      <div class="table-meta"><strong>Raw vs Learned comparison</strong><span id="learningCompareVerdict">—</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Mode</th><th>Trades</th><th>Win rate</th><th>Avg result</th><th>Risk quality (Sharpe)</th><th>Downside safety (Sortino)</th><th>Profit vs loss</th><th>Worst fall</th></tr></thead>
+        <tbody id="learningCompareBody"></tbody>
+      </table></div>
+      <div class="simple-guide" style="margin:12px;" id="learningCompareNote"></div>
+    </div>
+    <div class="simple-guide" style="margin-top:12px;">
+      <b>How stock selection works:</b> “Quality stocks to scan” means the starting tradable universe. The app first removes inactive, illiquid, old-symbol, low-volume, low-turnover, or bad-history stocks. Then, on each old test date, it ranks the remaining quality stocks by bullish setup, volume confirmation, risk/reward, market type, past pattern behavior, and stock-specific history. It is not random.
+    </div>
+    <div class="simple-guide" style="margin-top:12px;">
+      <b>Data integrity:</b> New backtests record whether prices are raw or adjusted, the market-data source, and the candle-quality checks used before learning. Suspicious candle data is blocked so wrong prices do not become wrong learning.
+    </div>
+
+    <div class="acc-summary" id="researchSummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="btTrades">—</div><div class="slbl">Trades tested</div></div>
+      <div class="scard"><div class="sval g" id="btWinRate">—</div><div class="slbl">Win rate</div></div>
+      <div class="scard"><div class="sval a" id="btExpectancy">—</div><div class="slbl">Avg result / trade</div></div>
+      <div class="scard"><div class="sval b" id="btSharpe">—</div><div class="slbl">Risk quality</div></div>
+      <div class="scard"><div class="sval b" id="btSortino">—</div><div class="slbl">Downside safety</div></div>
+      <div class="scard"><div class="sval dn" id="btDD">—</div><div class="slbl">Worst fall</div></div>
+      <div class="scard"><div class="sval b" id="btPF">—</div><div class="slbl">Profit vs loss</div></div>
+    </div>
+
+    <div class="table-card" id="researchRunsCard">
+      <div class="table-meta"><strong>Past test summary</strong><span>Tap/click any row to open the full history of that backtest</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>#/Test time</th><th>Market</th><th>Timeframe</th><th>Past period checked</th><th>Trades tested</th><th>Worked</th><th>Avg result</th><th>Risk quality / downside safety</th><th>Worst fall</th><th>Best / worst market type</th></tr></thead>
+        <tbody id="researchRunsBody"><tr class="loading-row"><td colspan="10">Loading research...</td></tr></tbody>
+      </table></div>
+      <div class="simple-guide" style="margin:12px;">Tap a past test row to see every simulated trade, skipped weak setup, and quality/liquidity filter note for that run.</div>
+    </div>
+
+    <div class="table-card" id="validationBenchmarkCard">
+      <div class="table-meta"><strong>Stronger proof checks</strong><span>Training vs validation and benchmark comparison help avoid fake confidence</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Check</th><th>What it means</th><th>Result</th><th>Action</th></tr></thead>
+        <tbody id="validationBenchmarkBody"><tr><td colspan="4">Run a backtest to see validation and benchmark checks.</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div class="simple-guide">
+      <b>What is the learning table?</b> Each row is a lesson from past testing. It says: “When the market looked like this before, did it usually work or fail?” Good lessons boost future scan scores. Bad lessons reduce confidence or help the system avoid weak trades.
+    </div>
+
+    <div class="table-card" id="learningArchitectureCard">
+      <div class="table-meta"><strong>How the system learns separately</strong><span>Different engines learn from different proof, so intraday is not blindly controlled by daily backtests</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Learning source</th><th>Improves</th><th>What it checks</th></tr></thead>
+        <tbody id="learningArchitectureBody"><tr><td colspan="3">Loading learning architecture...</td></tr></tbody>
+      </table></div>
+      <div class="simple-guide" id="strictRulesBox" style="margin:12px;">Strict Learning Mode: trade less, filter harder, and show no-trade when edge is weak.</div>
+    </div>
+
+    <div class="table-card" id="strategyMemoryCard">
+      <div class="table-meta"><strong>Learning rules found from past tests</strong><span>Plain-English lessons that future scans use to boost or avoid setups</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Learned at</th><th>Market</th><th>Timeframe</th><th>Market type</th><th>What the system saw</th><th>Past tests</th><th>Worked</th><th>Avg result</th><th>Future action</th></tr></thead>
+        <tbody id="strategyMemoryBody"><tr class="loading-row"><td colspan="9">Loading learning rules...</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="perStockBacktestCard">
+      <div class="table-meta"><strong>Stock-wise past performance</strong><span>Shows which stocks historically worked, failed, and why</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stock</th><th>Times tested</th><th>Worked</th><th>Avg result</th><th>Avg win / loss</th><th>Best / worst</th><th>Target / stop</th><th>Main failure reason</th><th>Lesson</th></tr></thead>
+        <tbody id="perStockBacktestBody"><tr class="loading-row"><td colspan="9">Run or refresh research to see per-stock stats.</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="mistakeLessonsCard">
+      <div class="table-meta"><strong>Mistake lessons</strong><span>Wrong predictions become simple rules for future scans</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Checked at</th><th>Stock</th><th>Signal</th><th>Result</th><th>Why it failed</th><th>Actual move</th><th>What system learns</th></tr></thead>
+        <tbody id="mistakeLessonsBody"><tr class="loading-row"><td colspan="7">No lessons loaded yet.</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div class="table-card" id="backtestTradesCard" style="display:none;">
+      <div class="table-meta"><strong id="backtestTradesTitle">Past simulated trades</strong><span id="backtestTradesSubtitle">Uses real historical candles. Raw vs Protected shows original outcome vs exit-aware capital/profit protection; learning keeps both.</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Old test date</th><th>Stock</th><th>Historical entry price</th><th>Historical exit price</th><th>Target / stop</th><th>Past result</th><th>How it ended</th><th>Market type</th><th>Setup score</th></tr></thead>
+        <tbody id="backtestTradesBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:18px;">
+      Research Lab is only proof-testing. Future picks still come from the main Scan / Prediction Engine and Intraday Engine. Use this page to understand past accuracy, weak patterns, and what the system is learning to avoid.
+    </div>
+  </div>
+
+  <div id="historyView" style="display:none;">
+    <div class="trade-warning">
+      Executed Trade History combines both engines. It shows paper/assisted/live positions, buy value, current or sell value, realised/mark-to-market P/L, volume confirmation, exit reason, and whether the trade came from the main locked-scan engine or the intraday engine.
+    </div>
+    <div class="track-actions">
+      <button class="secondary-btn" onclick="loadTradeHistory()">↻ Refresh history</button>
+      <div class="field"><label>Engine</label><select id="histSource" onchange="loadTradeHistory()"><option value="all">All engines</option><option value="trading">Trading Automation</option><option value="intraday">Intraday Engine</option></select></div>
+      <div class="field"><label>Market</label><select id="histMarket" onchange="loadTradeHistory()"><option value="all">All</option><option value="IN">India</option><option value="US">US</option><option value="Global">Global</option></select></div>
+      <div class="field"><label>Mode</label><select id="histMode" onchange="loadTradeHistory()"><option value="all">All</option><option value="paper">Paper</option><option value="assisted">Assisted</option><option value="live">Live</option></select></div>
+    </div>
+    <div class="cost-note" id="historyNote">History updates open positions before showing this page, so target/stop/profit-protection/trailing/momentum-fade/weekly-goal/horizon-expiry exits are reflected when data is available. Horizon expiry is the final fallback, not the first sell rule.</div>
+
+    <div class="acc-summary" id="historySummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="histTotal">—</div><div class="slbl">Total positions</div></div>
+      <div class="scard"><div class="sval b" id="histOpen">—</div><div class="slbl">Open positions</div></div>
+      <div class="scard"><div class="sval g" id="histRealised">—</div><div class="slbl">Realised P/L</div></div>
+      <div class="scard"><div class="sval a" id="histWinRate">—</div><div class="slbl">Closed win rate</div></div>
+      <div class="scard"><div class="sval g" id="histToday">—</div><div class="slbl">Today realised P/L</div></div>
+      <div class="scard"><div class="sval b" id="histIntradayPnl">—</div><div class="slbl">Intraday P/L</div></div>
+      <div class="scard"><div class="sval b" id="histTradingPnl">—</div><div class="slbl">Trading Auto P/L</div></div>
+    </div>
+
+    <div class="table-card" id="historyTableCard">
+      <div class="table-meta"><strong>Executed stocks and positions</strong><span>Open rows show mark-to-market; closed rows show realised P/L.</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Engine</th><th>Stock</th><th>Mode</th><th>Qty</th><th>Buy</th><th>Target / Stop</th><th>Current / Sell</th><th>Values</th><th>Volume</th><th>P/L</th><th>Status / Exit</th></tr></thead>
+        <tbody id="historyBody"><tr class="loading-row"><td colspan="12">Loading history...</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:18px;">
+Major difference: Trading Automation uses the locked AI day/week scan and then applies opening confirmation plus exits. Intraday Engine is a separate 5-minute live bullish scanner for same-day entries/exits. Both share capital protection, weekly target/loss guard, and paper/assisted/live execution modes.
+    </div>
+  </div>
+
+  <div id="exportView" style="display:none;">
+    <div class="trade-warning">
+      Full Export downloads every application database table plus computed summaries: experiments/backtests, predictions, correctness rates, learning logs, trades, costs, scan caches, settings, and intraday run history. Secrets such as DATABASE_URL, API keys, broker tokens, and webhook secrets are intentionally excluded.
+    </div>
+    <div class="track-actions">
+      <button class="secondary-btn" onclick="loadExportManifest()">↻ Refresh export manifest</button>
+      <button class="secondary-btn" onclick="downloadFullExport('zip')">⬇ Download full ZIP export</button>
+      <button class="secondary-btn" onclick="downloadFullExport('json')">⬇ Download full JSON export</button>
+    </div>
+    <div class="cost-note" id="exportNote">Export includes all known PostgreSQL tables and summary reports. ZIP contains both JSON and CSV for every table, including Research Lab runs, learning rules, per-stock stats, duplicate-learning fingerprints, and data-integrity/price-mode metadata for new backtests.</div>
+
+    <div class="acc-summary" id="exportSummary" style="display:none;">
+      <div class="scard"><div class="sval b" id="exportTables">—</div><div class="slbl">Tables included</div></div>
+      <div class="scard"><div class="sval g" id="exportPreds">—</div><div class="slbl">Predictions</div></div>
+      <div class="scard"><div class="sval a" id="exportWinRate">—</div><div class="slbl">Prediction win rate</div></div>
+      <div class="scard"><div class="sval b" id="exportTrades">—</div><div class="slbl">Trade positions</div></div>
+      <div class="scard"><div class="sval g" id="exportCosts">—</div><div class="slbl">AI cost logged</div></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-meta"><strong>Export manifest</strong><span>Every row count below is included in the full ZIP/JSON export.</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Table</th><th>Rows</th><th>Columns included</th><th>Status</th></tr></thead>
+        <tbody id="exportManifestBody"><tr class="loading-row"><td colspan="4">Open this tab to load export manifest.</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:18px;">
+      Export policy: this feature is for your own audit, backup, analysis, and debugging. It does not export secret environment variables. Keep downloaded files private because they may contain trading logs, predictions, experiment results, and broker/order metadata.
+    </div>
+  </div>
+
+</div>
+
+<script>
+let horizon = 'day', market = 'US';
+let accuracyLoaded = false;
+let costsLoaded = false;
+let researchLoaded = false;
+let tradingLoaded = false;
+let intradayLoaded = false;
+let historyLoaded = false;
+let exportLoaded = false;
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+
+function parseServerTimestamp(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  let raw = String(value).trim();
+  if (!raw) return null;
+  // PostgreSQL/Render often returns UTC timestamps without a timezone suffix.
+  // Treat naive ISO timestamps as UTC, then display them in IST.
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(raw)) {
+    raw = raw.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function fmtISTDateTime(value) {
+  const d = parseServerTimestamp(value);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  }).format(d) + ' IST';
+}
+
+function fmtISTTime(value) {
+  const d = parseServerTimestamp(value);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  }).format(d) + ' IST';
+}
+
+
+function showToast(title, message, type='success', timeout=4200) {
+  const stack = document.getElementById('toastStack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = `toast ${type || ''}`;
+  el.innerHTML = `<div class="toast-title">${escapeHtml(title || 'Update')}</div><div class="toast-body">${escapeHtml(message || '')}</div>`;
+  stack.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(-6px)'; setTimeout(() => el.remove(), 250); }, timeout);
+}
+
+function setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value; }
+function setStatusClass(id, cls) { const el = document.getElementById(id); if (el) { el.classList.remove('status-running','status-stopped','status-closed'); if (cls) el.classList.add(cls); } }
+function addSecondsIso(value, seconds) { const d = parseServerTimestamp(value); if (!d) return null; return new Date(d.getTime() + Number(seconds || 0) * 1000).toISOString(); }
+function shortTime(value) { const d = parseServerTimestamp(value); if (!d) return '—'; return new Intl.DateTimeFormat('en-IN', { timeZone:'Asia/Kolkata', hour:'numeric', minute:'2-digit', hour12:true }).format(d) + ' IST'; }
+function friendlySessionState(state) {
+  const s = String(state || '').replaceAll('_',' ');
+  if (!s || s === 'undefined') return '—';
+  if (state === 'open_ready') return 'Open / ready';
+  if (state === 'opening_wait') return 'Opening wait';
+  if (state === 'before_open') return 'Before open';
+  if (state === 'after_close') return 'Closed';
+  if (state === 'closed_non_trading_day') return 'Non-trading day';
+  return s;
+}
+
+function hideFirstScanButton() {
+  // Keep the safe initializer visible at all times. The backend lock prevents
+  // repeated paid scans and returns the existing locked result when available.
+  const fs = document.getElementById('firstScanBtn');
+  const ft = document.getElementById('firstScanTxt');
+  if (fs) {
+    fs.style.display = 'flex';
+    fs.disabled = false;
+    fs.title = 'Safe initializer: creates the first locked prediction only when none exists for this market/horizon.';
+  }
+  if (ft) ft.textContent = 'Run First Scan';
+}
+
+function showFirstScanButton(label) {
+  const fs = document.getElementById('firstScanBtn');
+  const ft = document.getElementById('firstScanTxt');
+  if (ft) ft.textContent = label || 'Run First Scan';
+  if (fs) {
+    fs.style.display = 'flex';
+    fs.disabled = false;
+    fs.title = 'Safe initializer: creates the first locked prediction only when none exists for this market/horizon.';
+  }
+}
+
+function switchTab(tab) {
+  const isScanner = tab === 'scanner';
+  const isAccuracy = tab === 'accuracy';
+  const isCosts = tab === 'costs';
+  const isResearch = tab === 'research';
+  const isTrading = tab === 'trading';
+  const isIntraday = tab === 'intraday';
+  const isHistory = tab === 'history';
+  const isExport = tab === 'export';
+  document.getElementById('scannerView').style.display = isScanner ? 'block' : 'none';
+  document.getElementById('accuracyView').style.display = isAccuracy ? 'block' : 'none';
+  document.getElementById('costsView').style.display = isCosts ? 'block' : 'none';
+  document.getElementById('researchView').style.display = isResearch ? 'block' : 'none';
+  document.getElementById('tradingView').style.display = isTrading ? 'block' : 'none';
+  document.getElementById('intradayView').style.display = isIntraday ? 'block' : 'none';
+  document.getElementById('historyView').style.display = isHistory ? 'block' : 'none';
+  document.getElementById('exportView').style.display = isExport ? 'block' : 'none';
+  document.getElementById('tabScanner').className = 'tab-btn' + (isScanner ? ' active' : '');
+  document.getElementById('tabAccuracy').className = 'tab-btn' + (isAccuracy ? ' active' : '');
+  document.getElementById('tabCosts').className = 'tab-btn' + (isCosts ? ' active' : '');
+  document.getElementById('tabResearch').className = 'tab-btn' + (isResearch ? ' active' : '');
+  document.getElementById('tabTrading').className = 'tab-btn' + (isTrading ? ' active' : '');
+  document.getElementById('tabIntraday').className = 'tab-btn' + (isIntraday ? ' active' : '');
+  document.getElementById('tabHistory').className = 'tab-btn' + (isHistory ? ' active' : '');
+  document.getElementById('tabExport').className = 'tab-btn' + (isExport ? ' active' : '');
+  if (isAccuracy) loadAccuracy();
+  if (isCosts) loadCosts();
+  if (isResearch) loadResearch();
+  if (isTrading) loadTrading();
+  if (isIntraday) loadIntraday();
+  if (isHistory) loadTradeHistory();
+  if (isExport) loadExportManifest();
+}
+
+async function loadAccuracy() {
+  try {
+    const res = await fetch('/api/accuracy');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    renderAccuracy(data);
+  } catch (e) {
+    document.getElementById('accRecentBody').innerHTML =
+      `<tr><td colspan="9"><div class="acc-empty">Could not load track record: ${escapeHtml(e.message)}</div></td></tr>`;
+  }
+}
+
+function fmtMoney(value, symbol) {
+  if (value === null || value === undefined || value === '') return '—';
+  return `${symbol || '$'}${Number(value).toFixed(2)}`;
+}
+
+function pnlNetGrossHtml(p, sym) {
+  const net = p.net_pnl_amount !== null && p.net_pnl_amount !== undefined ? Number(p.net_pnl_amount) : (p.pnl_amount !== null && p.pnl_amount !== undefined ? Number(p.pnl_amount) : null);
+  const gross = p.gross_pnl_amount !== null && p.gross_pnl_amount !== undefined ? Number(p.gross_pnl_amount) : null;
+  const cost = p.cost_amount !== null && p.cost_amount !== undefined ? Number(p.cost_amount) : null;
+  const pct = p.pnl_pct !== null && p.pnl_pct !== undefined ? `${Number(p.pnl_pct).toFixed(2)}% net` : '—';
+  if (net === null) {
+    const expCost = p.expected_round_trip_cost !== null && p.expected_round_trip_cost !== undefined ? Number(p.expected_round_trip_cost) : null;
+    const expNet = p.expected_net_profit_at_target !== null && p.expected_net_profit_at_target !== undefined ? Number(p.expected_net_profit_at_target) : null;
+    if (expCost !== null || expNet !== null) {
+      return `<div>Open</div><div class="rr">Expected net @ target ${expNet !== null ? fmtMoney(expNet, sym) : '—'}</div><div class="rr">Est. round-trip cost ${expCost !== null ? fmtMoney(expCost, sym) : '—'}</div>`;
+    }
+    return '—';
+  }
+  const cls = net >= 0 ? 'up' : 'dn';
+  const grossLine = gross !== null ? `<div class="rr">Gross ${fmtMoney(gross, sym)}</div>` : '';
+  const costLine = cost !== null ? `<div class="rr">Costs ${fmtMoney(cost, sym)}</div>` : '';
+  return `<span class="gain-pct ${cls}">${fmtMoney(net, sym)}</span><div class="rr">${pct}</div>${grossLine}${costLine}`;
+}
+
+function outcomeClass(r) {
+  if (r.outcome_status === 'neutral') return '';
+  return r.outcome_correct ? 'correct' : 'wrong';
+}
+
+function renderAccuracy(data) {
+  const o = data.overall || {};
+  document.getElementById('accSummary').style.display = 'grid';
+  document.getElementById('accChecked').textContent = o.total_checked || 0;
+  document.getElementById('accWinRate').textContent = o.win_rate_pct !== null && o.win_rate_pct !== undefined ? o.win_rate_pct + '%' : '—';
+  document.getElementById('accPending').textContent = o.pending || 0;
+  document.getElementById('accAvgActual').textContent = o.avg_actual_gain_pct !== null && o.avg_actual_gain_pct !== undefined ? o.avg_actual_gain_pct + '%' : '—';
+  document.getElementById('accAvgError').textContent = o.avg_abs_error_pct !== null && o.avg_abs_error_pct !== undefined ? o.avg_abs_error_pct + ' pts' : '—';
+
+  const breakdown = data.breakdown || [];
+  if (breakdown.length) {
+    document.getElementById('accBreakdownCard').style.display = 'block';
+    document.getElementById('accBreakdownBody').innerHTML = breakdown.map(b => `
+      <tr>
+        <td>${escapeHtml(b.market)}</td>
+        <td>${escapeHtml(b.horizon)}</td>
+        <td>${b.total_checked}</td>
+        <td>${b.total_correct}</td>
+        <td>${b.total_wrong}</td>
+        <td>${b.total_neutral}</td>
+        <td>${b.pending}</td>
+        <td>${b.win_rate_pct !== null ? b.win_rate_pct + '%' : '—'}</td>
+      </tr>`).join('');
+  }
+
+  const recent = data.recent || [];
+  if (!recent.length) {
+    document.getElementById('accRecentBody').innerHTML =
+      '<tr><td colspan="9"><div class="acc-empty">No predictions scored yet. Run scans and use Check Due Predictions after the horizon exchange close.</div></td></tr>';
+    return;
+  }
+  document.getElementById('accRecentBody').innerHTML = recent.map(r => {
+    const sym = r.currency_symbol || (r.market === 'IN' ? '₹' : '$');
+    const label = r.outcome_label || (r.outcome_correct ? 'Correct' : 'Wrong');
+    const cls = outcomeClass(r);
+    return `<tr>
+      <td><div class="ticker-name">${escapeHtml(r.ticker)}</div><div class="co-sub">${escapeHtml(r.company||'')}</div></td>
+      <td>${escapeHtml(r.market)}</td>
+      <td><span class="badge ${escapeHtml(r.signal)}">${escapeHtml(r.signal)}</span></td>
+      <td>${fmtMoney(r.entry_price, sym)}</td>
+      <td>${r.predicted_gain_pct !== null ? r.predicted_gain_pct + '%' : '—'}</td>
+      <td>${r.actual_gain_pct !== null ? r.actual_gain_pct + '%' : '—'}<div class="rr">Close: ${fmtMoney(r.actual_price, sym)}</div></td>
+      <td><span class="acc-outcome ${cls}">${escapeHtml(label)}</span><div class="rr">${escapeHtml(r.failure_reason || r.outcome_status || '')}</div></td>
+      <td><div class="reason-cell">${escapeHtml(r.lesson_summary || '—')}</div></td>
+      <td>${r.checked_at ? fmtISTDateTime(r.checked_at) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function checkDuePredictions() {
+  const btn = document.getElementById('checkDueBtn');
+  const msg = document.getElementById('checkMsg');
+  btn.disabled = true;
+  msg.textContent = 'Checking only predictions whose exchange close + safety delay has passed...';
+  try {
+    const res = await fetch('/api/check-accuracy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market, horizon })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not check predictions');
+    if (data.skipped) {
+      msg.textContent = 'No due unchecked predictions yet. The system did not verify anything early.';
+    } else {
+      msg.textContent = `Verified ${data.updated || 0} prediction rows after close. ${data.errors && data.errors.length ? 'Some rows had data errors.' : ''}`;
+    }
+    await loadAccuracy();
+  } catch(e) {
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadCosts() {
+  try {
+    const res = await fetch(`/api/costs?market=${encodeURIComponent(market)}&horizon=${encodeURIComponent(horizon)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    renderCosts(data);
+  } catch(e) {
+    document.getElementById('costNote').textContent = 'Could not load costs: ' + e.message;
+  }
+}
+
+function renderCosts(data) {
+  const t = data.totals || {};
+  const est = data.estimate || {};
+  const next = est.estimated_paid_cost_if_first_scan_runs || {};
+  document.getElementById('costSummary').style.display = 'grid';
+  document.getElementById('costCalls').textContent = t.total_calls || 0;
+  document.getElementById('costInr').textContent = '₹' + Number(t.cost_inr || 0).toFixed(2);
+  document.getElementById('costTokens').textContent = `${t.input_tokens || 0} / ${t.output_tokens || 0}`;
+  document.getElementById('nextCost').textContent = est.locked_prediction_exists ? '₹0 locked' : ('₹' + Number(next.cost_inr || 0).toFixed(2));
+  document.getElementById('cachedCost').textContent = '₹0';
+  const b = data.ai_budget || est.ai_budget || {};
+  document.getElementById('aiBudgetStatus').textContent = b.allowed === false ? 'Blocked' : 'Allowed';
+  const budgetLine = b.today ? ` AI budget today: ${b.today.calls}/${b.today.max_calls} calls, ₹${Number(b.today.cost_inr || 0).toFixed(2)}/₹${Number(b.today.max_cost_inr || 0).toFixed(2)}.` : '';
+  document.getElementById('costNote').textContent = (est.note || 'Cached scans cost ₹0.') + budgetLine;
+
+  const daily = data.daily || [];
+  const dailyCard = document.getElementById('costDailyCard');
+  if (daily.length) {
+    dailyCard.style.display = 'block';
+    document.getElementById('costDailyBody').innerHTML = daily.map(r => `
+      <tr>
+        <td>${escapeHtml(r.date_ist || '—')}</td>
+        <td>${Number(r.calls || 0).toLocaleString('en-IN')}</td>
+        <td>${Number(r.input_tokens || 0).toLocaleString('en-IN')}</td>
+        <td>${Number(r.output_tokens || 0).toLocaleString('en-IN')}</td>
+        <td>₹${Number(r.cost_inr || 0).toFixed(2)}<div class="rr">$${Number(r.cost_usd || 0).toFixed(4)}</div></td>
+        <td><div class="reason-cell">${escapeHtml(r.call_types || '')}</div></td>
+      </tr>`).join('');
+  } else {
+    dailyCard.style.display = 'none';
+  }
+
+  const byType = data.by_call_type || [];
+  const typeCard = document.getElementById('costTypeCard');
+  if (byType.length) {
+    typeCard.style.display = 'block';
+    document.getElementById('costTypeBody').innerHTML = byType.map(r => `
+      <tr>
+        <td>${escapeHtml(r.call_type || '—')}</td>
+        <td>${Number(r.calls || 0).toLocaleString('en-IN')}</td>
+        <td>${Number(r.input_tokens || 0).toLocaleString('en-IN')}</td>
+        <td>${Number(r.output_tokens || 0).toLocaleString('en-IN')}</td>
+        <td>₹${Number(r.cost_inr || 0).toFixed(2)}<div class="rr">$${Number(r.cost_usd || 0).toFixed(4)}</div></td>
+        <td>${r.last_call_at ? fmtISTDateTime(r.last_call_at) : '—'}</td>
+      </tr>`).join('');
+  } else {
+    typeCard.style.display = 'none';
+  }
+
+  const recent = data.recent || [];
+  const card = document.getElementById('costTableCard');
+  if (!recent.length) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  document.getElementById('costRecentBody').innerHTML = recent.map(r => `
+    <tr>
+      <td>${r.created_at ? fmtISTDateTime(r.created_at) : '—'}</td>
+      <td>${escapeHtml(r.call_type)}</td>
+      <td>${escapeHtml((r.market || '') + '/' + (r.horizon || ''))}</td>
+      <td>${escapeHtml(r.model || '')}</td>
+      <td>${r.input_tokens}</td>
+      <td>${r.output_tokens}</td>
+      <td>₹${Number(r.cost_inr || 0).toFixed(2)}<div class="rr">$${Number(r.cost_usd || 0).toFixed(4)}</div></td>
+    </tr>`).join('');
+}
+
+
+
+
+async function loadResearch() {
+  try {
+    const res = await fetch('/api/research');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    renderResearch(data);
+  } catch(e) {
+    document.getElementById('researchNote').textContent = 'Could not load research: ' + e.message;
+    document.getElementById('researchRunsBody').innerHTML = `<tr><td colspan="10"><div class="acc-empty">Could not load research: ${escapeHtml(e.message)}</div></td></tr>`;
+  }
+}
+
+function easyRegimeName(regime) {
+  const map = {
+    all: 'All market types',
+    choppy_sideways: 'Sideways / mixed market',
+    trending_bull: 'Up-trending market',
+    risk_off_or_high_vol: 'High-risk / volatile market',
+    unknown: 'Unknown market type'
+  };
+  return map[regime] || String(regime || '—').replaceAll('_', ' ');
+}
+
+function easyPatternName(pattern) {
+  if (!pattern || pattern === 'all') return 'Overall market condition';
+  const map = {
+    rsi_bull: 'RSI bullish',
+    rsi_high: 'RSI too high / overheated',
+    rsi_weak: 'RSI weak',
+    rsi_neutral: 'RSI neutral',
+    vol_strong: 'Strong volume',
+    vol_normal: 'Normal volume',
+    vol_low: 'Low volume',
+    rr_weak: 'Weak reward vs risk',
+    rr_ok: 'Okay reward vs risk',
+    rr_good: 'Good reward vs risk',
+    rr_strong: 'Strong reward vs risk',
+    macd_pos: 'MACD positive',
+    macd_neg: 'MACD negative',
+    macd_flat: 'MACD flat'
+  };
+  return String(pattern).split('+').map(x => map[x] || x.replaceAll('_', ' ')).join(' + ');
+}
+
+function easyLearningAction(adj, win, exp) {
+  const a = Number(adj || 0);
+  const w = Number(win || 0);
+  const e = Number(exp || 0);
+  if (a >= 0.75 || (w >= 65 && e > 0.15)) return {label:'Strong boost', cls:'boost', note:'Future scans can trust this more'};
+  if (a >= 0.10 || (w >= 55 && e > 0)) return {label:'Small boost', cls:'boost', note:'Slightly improve future score'};
+  if (a <= -0.75 || (w <= 35 && e < 0)) return {label:'Avoid / strong penalty', cls:'penalty', note:'Reduce confidence or skip similar setups'};
+  if (a <= -0.10 || (w < 45 && e <= 0)) return {label:'Penalty', cls:'penalty', note:'Be careful with similar setups'};
+  return {label:'Neutral', cls:'neutral', note:'Not enough edge yet'};
+}
+
+function easyOutcomeName(outcome) {
+  const map = {
+    target_hit: 'Target hit',
+    stop_loss_hit: 'Stop-loss hit',
+    horizon_exit: 'Time exit',
+    partial_success: 'Small win',
+    partial_failure: 'Small loss',
+    protected_capital_exit: 'Protected capital exit',
+    protected_profit_exit: 'Protected profit exit'
+  };
+  return map[outcome] || String(outcome || '—').replaceAll('_', ' ');
+}
+
+
+function rerunBadge(info) {
+  if (!info || !info.is_rerun) return '';
+  const v = info.verdict;
+  const cls = v === 'improved' ? 'boost' : (v === 'worse' ? 'penalty' : 'neutral');
+  const label = v === 'improved' ? 'Improved vs #' + info.previous_run_id
+              : v === 'worse' ? 'Worse vs #' + info.previous_run_id
+              : v === 'no_change' ? 'No change vs #' + info.previous_run_id
+              : v === 'incomplete_data' ? 'Compared to #' + info.previous_run_id + ' (incomplete data)'
+              : 'Mixed vs #' + info.previous_run_id;
+  const parts = [];
+  if (info.delta_profit_factor !== null && info.delta_profit_factor !== undefined) parts.push(`PF ${info.delta_profit_factor >= 0 ? '+' : ''}${info.delta_profit_factor.toFixed(3)}`);
+  if (info.delta_win_rate_pct !== null && info.delta_win_rate_pct !== undefined) parts.push(`Win ${info.delta_win_rate_pct >= 0 ? '+' : ''}${info.delta_win_rate_pct.toFixed(1)}%`);
+  if (info.delta_expectancy_pct !== null && info.delta_expectancy_pct !== undefined) parts.push(`Exp ${info.delta_expectancy_pct >= 0 ? '+' : ''}${info.delta_expectancy_pct.toFixed(3)}%`);
+  return `<div class="rr"><span class="action-pill ${cls}">🔁 Rerun · ${escapeHtml(label)}</span></div><div class="rr">${escapeHtml(parts.join(' · '))}</div>`;
+}
+
+function renderResearchDetails(data) {
+  const perStock = data.per_stock || [];
+  document.getElementById('perStockBacktestBody').innerHTML = perStock.length ? perStock.map((s, idx) => {
+    const hasPrev = s.prev_win_rate_pct !== null && s.prev_win_rate_pct !== undefined;
+    const cmpCls = !hasPrev ? '' : ((s.delta_expectancy_pct || 0) > 0 ? 'boost' : ((s.delta_expectancy_pct || 0) < 0 ? 'penalty' : 'neutral'));
+    const cmpLine = !hasPrev ? '' : `<div class="rr"><span class="action-pill ${cmpCls}">🔁 vs #${s.prev_run_id}: Win ${s.delta_win_rate_pct >= 0 ? '+' : ''}${Number(s.delta_win_rate_pct).toFixed(1)}% · Exp ${s.delta_expectancy_pct >= 0 ? '+' : ''}${Number(s.delta_expectancy_pct).toFixed(3)}%</span></div>`;
+    return `
+    <tr>
+      <td><div class="ticker-name">#${idx + 1} ${escapeHtml(s.ticker)}</div><div class="co-sub">Last ${escapeHtml(s.last_signal_date || '')}</div>${cmpLine}</td>
+      <td>${s.trades || 0}</td>
+      <td>${s.win_rate_pct !== null && s.win_rate_pct !== undefined ? Number(s.win_rate_pct).toFixed(1)+'%' : '—'}</td>
+      <td><span class="gain-pct ${Number(s.expectancy_pct || 0) >= 0 ? 'up' : 'dn'}">${s.expectancy_pct !== null && s.expectancy_pct !== undefined ? Number(s.expectancy_pct).toFixed(3)+'%' : '—'}</span></td>
+      <td>${s.avg_win_pct !== null && s.avg_win_pct !== undefined ? Number(s.avg_win_pct).toFixed(2)+'%' : '—'} / ${s.avg_loss_pct !== null && s.avg_loss_pct !== undefined ? Number(s.avg_loss_pct).toFixed(2)+'%' : '—'}</td>
+      <td>${s.best_trade_pct !== null && s.best_trade_pct !== undefined ? Number(s.best_trade_pct).toFixed(2)+'%' : '—'} / ${s.worst_trade_pct !== null && s.worst_trade_pct !== undefined ? Number(s.worst_trade_pct).toFixed(2)+'%' : '—'}</td>
+      <td>${s.target_hits || 0} / ${s.stop_hits || 0}<div class="rr">Horizon ${s.horizon_exits || 0}</div></td>
+      <td><div class="reason-cell">${escapeHtml(s.top_failure_reason || '—')}</div><div class="rr">${escapeHtml(s.dominant_regime || '')}</div></td>
+      <td><div class="reason-cell">${escapeHtml(s.lesson || '')}</div></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9"><div class="acc-empty">No per-stock backtest stats yet. Run a backtest first.</div></td></tr>';
+
+  const lessons = data.recent_lessons || [];
+  document.getElementById('mistakeLessonsBody').innerHTML = lessons.length ? lessons.map(l => `
+    <tr>
+      <td>${l.created_at ? fmtISTDateTime(l.created_at) : '—'}</td>
+      <td><div class="ticker-name">${escapeHtml(l.ticker || '')}</div><div class="co-sub">${escapeHtml((l.market || '') + '/' + (l.horizon || ''))}</div></td>
+      <td>${escapeHtml(l.signal || '')}</td>
+      <td>${escapeHtml(l.outcome_label || l.outcome_status || '')}</td>
+      <td><div class="reason-cell">${escapeHtml(l.failure_reason || '—')}</div></td>
+      <td>${l.actual_gain_pct !== null && l.actual_gain_pct !== undefined ? Number(l.actual_gain_pct).toFixed(2)+'%' : '—'}</td>
+      <td><div class="reason-cell">${escapeHtml(l.lesson_summary || '')}</div></td>
+    </tr>`).join('') : '<tr><td colspan="7"><div class="acc-empty">No checked prediction lessons yet. They appear after due predictions are verified.</div></td></tr>';
+}
+
+function renderResearch(data) {
+  const runs = data.latest || [];
+  const cfg = data.config || {};
+  const arch = cfg.strict_learning_mode || {};
+  if (document.getElementById('learningArchitectureBody')) {
+    const paths = arch.paths || [];
+    document.getElementById('learningArchitectureBody').innerHTML = paths.length ? paths.map(p => `
+      <tr><td><div class="plain-main">${escapeHtml(p.source)}</div></td><td>${escapeHtml(p.improves)}</td><td><div class="reason-cell">${escapeHtml(p.uses)}</div></td></tr>`).join('') : '<tr><td colspan="3">Strict architecture will appear after refresh.</td></tr>';
+    const rules = arch.strict_rules || [];
+    document.getElementById('strictRulesBox').innerHTML = `<b>Strict Learning Mode:</b> ${escapeHtml(arch.plain_summary || 'Trade less, filter harder, and avoid weak repeated patterns.')}<br><span class="plain-sub">Rules: ${escapeHtml(rules.join(' • '))}</span>`;
+  }
+  document.getElementById('researchNote').textContent = `Backtest Lab ready. Quality stocks are filtered first, then the best setups are picked on each old test date. Exact duplicate backtests are protected from double-counting. Claude used here: ${cfg.uses_claude ? 'yes' : 'no'}.`;
+  if (runs.length) {
+    const r = runs[0];
+    document.getElementById('researchSummary').style.display = 'grid';
+    document.getElementById('btTrades').textContent = r.total_trades || 0;
+    document.getElementById('btWinRate').textContent = r.win_rate_pct !== null && r.win_rate_pct !== undefined ? Number(r.win_rate_pct).toFixed(1) + '%' : '—';
+    document.getElementById('btExpectancy').textContent = r.expectancy_pct !== null && r.expectancy_pct !== undefined ? Number(r.expectancy_pct).toFixed(3) + '%' : '—';
+    document.getElementById('btSharpe').textContent = r.sharpe !== null && r.sharpe !== undefined ? Number(r.sharpe).toFixed(2) : '—';
+    document.getElementById('btSortino').textContent = r.sortino !== null && r.sortino !== undefined ? Number(r.sortino).toFixed(2) : '—';
+    document.getElementById('btDD').textContent = r.max_drawdown_pct !== null && r.max_drawdown_pct !== undefined ? Number(r.max_drawdown_pct).toFixed(2) + '%' : '—';
+    document.getElementById('btPF').textContent = r.profit_factor !== null && r.profit_factor !== undefined ? Number(r.profit_factor).toFixed(2) : '—';
+  }
+  document.getElementById('researchRunsBody').innerHTML = runs.length ? runs.map(r => `
+    <tr onclick="loadBacktestRun(${Number(r.id || 0)})" style="cursor:pointer;" title="Open full backtest history">
+      <td><div class="plain-main">#${Number(r.id || 0)} · ${fmtISTDateTime(r.created_at)}</div><div class="rr">${r.learning_applied === false || r.duplicate_of_run_id ? 'Duplicate / no extra learning' : 'Tap to open'}</div>${rerunBadge(r.rerun_info)}</td>
+      <td>${escapeHtml(r.market)}</td>
+      <td>${escapeHtml(r.horizon)}</td>
+      <td>${escapeHtml(r.start_date || '')} → ${escapeHtml(r.end_date || '')}</td>
+      <td>${r.total_trades || 0}</td>
+      <td>${r.win_rate_pct !== null && r.win_rate_pct !== undefined ? Number(r.win_rate_pct).toFixed(1)+'%' : '—'}</td>
+      <td>${r.expectancy_pct !== null && r.expectancy_pct !== undefined ? Number(r.expectancy_pct).toFixed(3)+'%' : '—'}</td>
+      <td>${r.sharpe !== null && r.sharpe !== undefined ? Number(r.sharpe).toFixed(2) : '—'} / ${r.sortino !== null && r.sortino !== undefined ? Number(r.sortino).toFixed(2) : '—'}</td>
+      <td>${r.max_drawdown_pct !== null && r.max_drawdown_pct !== undefined ? Number(r.max_drawdown_pct).toFixed(2)+'%' : '—'}</td>
+      <td>${escapeHtml(r.best_regime || '—')} / ${escapeHtml(r.worst_regime || '—')}</td>
+    </tr>`).join('') : '<tr><td colspan="10"><div class="acc-empty">No backtests yet. Run one to build strategy memory.</div></td></tr>';
+  const latestMetrics = runs.length ? (typeof runs[0].metrics_json === 'string' ? (() => { try { return JSON.parse(runs[0].metrics_json); } catch(e) { return {}; } })() : (runs[0].metrics_json || {})) : {};
+  const tv = latestMetrics.training_validation || {};
+  const bm = latestMetrics.benchmark_comparison || {};
+  const strict = latestMetrics.strict_learning || {};
+  if (document.getElementById('validationBenchmarkBody')) {
+    document.getElementById('validationBenchmarkBody').innerHTML = runs.length ? `
+      <tr><td>Training vs validation</td><td>Checks if the edge still works on the later part of the test, not only the earlier part.</td><td>Validation trades: ${escapeHtml((tv.validation || {}).total_trades ?? '—')}, avg result: ${escapeHtml((tv.validation || {}).expectancy_pct ?? '—')}%, profit vs loss: ${escapeHtml((tv.validation || {}).profit_factor ?? '—')}</td><td>${tv.validation_positive ? '<span class="action-pill boost">Passed</span>' : '<span class="action-pill penalty">Needs improvement</span>'}</td></tr>
+      <tr><td>Benchmark comparison</td><td>Checks if the strategy beat a simple buy-and-hold reference on the same loaded stocks.</td><td>Strategy: ${escapeHtml(bm.strategy_sum_return_pct ?? '—')}%, benchmark: ${escapeHtml(bm.benchmark_return_pct ?? '—')}%, difference: ${escapeHtml(bm.strategy_minus_benchmark_pct ?? '—')}%</td><td>${Number(bm.strategy_minus_benchmark_pct || 0) > 0 ? '<span class="action-pill boost">Beat benchmark</span>' : '<span class="action-pill penalty">Did not beat benchmark</span>'}</td></tr>
+      <tr><td>Duplicate learning protection</td><td>If the same market, period, universe, filters, and settings were already tested, the app reuses the old result instead of counting the same evidence again.</td><td>${escapeHtml((latestMetrics.duplicate_protection || {}).plain_summary || 'Enabled for new backtests.')}</td><td>${(latestMetrics.duplicate_protection || {}).duplicate_found ? '<span class="action-pill neutral">Existing result reused</span>' : '<span class="action-pill boost">Protected</span>'}</td></tr>
+      <tr><td>Raw vs protected learning</td><td>Raw baseline teaches whether the entry setup was bad. Protected replay shows whether capital/profit protection reduced loss or avoided holding too long.</td><td>Raw avg: ${escapeHtml((latestMetrics.exit_aware_learning || {}).raw_entry_avg_pct ?? '—')}%, protected avg: ${escapeHtml((latestMetrics.exit_aware_learning || {}).protected_avg_pct ?? '—')}%, saved: ${escapeHtml((latestMetrics.exit_aware_learning || {}).total_avoided_loss_pct ?? '—')}%</td><td><span class="action-pill boost">Dual learning</span></td></tr>
+      <tr><td>Strict learning check</td><td>Backtest blocks true no-trade setups, but can still test watch-only setups so the system has enough examples to learn from.</td><td>Rejected: ${(strict.rejected_setups_sample || []).length}; tested with warnings: ${strict.watch_only_setups_tested || 0}; empty test days: ${strict.empty_test_days || 0}</td><td><span class="action-pill neutral">Balanced filter</span></td></tr>
+      <tr><td>Why setups were skipped</td><td>Shows why a backtest may have 0 trades, instead of hiding the reason.</td><td>${Object.entries(strict.rejection_counts || {}).length ? Object.entries(strict.rejection_counts || {}).map(([k,v]) => `${escapeHtml(k)}: ${escapeHtml(v)}`).join(' • ') : 'No strict rejection count recorded for this run.'}</td><td><span class="action-pill neutral">Explain skips</span></td></tr>
+      <tr><td>Quality stock filter</td><td>Inactive, illiquid, renamed, unavailable, or low-turnover stocks are skipped before learning.</td><td>Loaded quality stocks: ${escapeHtml(latestMetrics.universe_size_with_data ?? '—')}; skipped quality/unavailable: ${escapeHtml((latestMetrics.skipped_symbols || []).length || 0)}</td><td><span class="action-pill boost">Cleaner learning</span></td></tr>
+      <tr><td>News / macro event safety</td><td>Forward scans/trading check current macro risk such as war, trade policy, tariffs, rates, oil shocks, and regulation. Old backtests do not use today’s news.</td><td>${escapeHtml((latestMetrics.lookahead_policy || '').slice(0, 140))}</td><td><span class="action-pill neutral">No lookahead bias</span></td></tr>
+    ` : '<tr><td colspan="4">Run a backtest to see validation and benchmark checks.</td></tr>';
+  }
+  const memory = data.strategy_memory || [];
+  document.getElementById('strategyMemoryBody').innerHTML = memory.length ? memory.map(m => {
+    const action = easyLearningAction(m.confidence_adjustment, m.win_rate_pct, m.expectancy_pct);
+    const patternText = easyPatternName(m.pattern_key);
+    return `
+    <tr>
+      <td>${fmtISTDateTime(m.updated_at)}</td>
+      <td>${escapeHtml(m.market)}</td>
+      <td>${escapeHtml(m.horizon)}</td>
+      <td><div class="plain-main">${escapeHtml(easyRegimeName(m.regime))}</div><div class="plain-sub">Market condition during old tests</div></td>
+      <td><div class="plain-main">${escapeHtml(patternText)}</div><div class="plain-sub">Signal mix seen in past trades</div></td>
+      <td>${m.trades || 0}</td>
+      <td>${m.win_rate_pct !== null && m.win_rate_pct !== undefined ? Number(m.win_rate_pct).toFixed(1)+'%' : '—'}</td>
+      <td><span class="gain-pct ${Number(m.expectancy_pct || 0) >= 0 ? 'up' : 'dn'}">${m.expectancy_pct !== null && m.expectancy_pct !== undefined ? Number(m.expectancy_pct).toFixed(3)+'%' : '—'}</span></td>
+      <td><span class="action-pill ${action.cls}">${escapeHtml(action.label)}</span><div class="plain-sub">${escapeHtml(action.note)} (${m.confidence_adjustment !== null && m.confidence_adjustment !== undefined ? Number(m.confidence_adjustment).toFixed(2) : '0.00'})</div></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9"><div class="acc-empty">No learning rules yet. Run a backtest first.</div></td></tr>';
+  renderResearchDetails(data);
+}
+
+function renderBacktestTrades(trades, title='Past backtest trades', subtitle='Uses real historical candles. Raw vs Protected shows original outcome vs exit-aware capital/profit protection; learning keeps both.') {
+  const card = document.getElementById('backtestTradesCard');
+  const body = document.getElementById('backtestTradesBody');
+  document.getElementById('backtestTradesTitle').textContent = title;
+  document.getElementById('backtestTradesSubtitle').textContent = subtitle;
+  card.style.display = trades.length ? 'block' : 'none';
+  body.innerHTML = trades.map(t => `
+    <tr><td>${escapeHtml(t.signal_date)}</td><td><div class="ticker-name">${escapeHtml(t.ticker)}</div><div class="co-sub">${escapeHtml(t.market || '')}</div></td>
+    <td>${Number(t.entry_price || 0).toFixed(2)}</td><td>${Number(t.exit_price || 0).toFixed(2)}<div class="rr">${escapeHtml(t.exit_date || '')}</div></td>
+    <td>${Number(t.target_price || 0).toFixed(2)}<div class="rr">SL ${Number(t.stop_price || 0).toFixed(2)}</div></td>
+    <td><span class="gain-pct ${Number(t.net_return_pct || 0) >= 0 ? 'up' : 'dn'}">${Number(t.net_return_pct || 0).toFixed(2)}%</span><div class="rr">Raw ${t.unprotected_net_return_pct !== null && t.unprotected_net_return_pct !== undefined ? Number(t.unprotected_net_return_pct).toFixed(2)+'%' : '—'} · Protected ${t.protected_net_return_pct !== null && t.protected_net_return_pct !== undefined ? Number(t.protected_net_return_pct).toFixed(2)+'%' : '—'}</div></td>
+    <td>${escapeHtml(easyOutcomeName(t.outcome))}<div class="rr">${escapeHtml(t.protected_action || '')}</div></td><td>${escapeHtml(easyRegimeName(t.regime))}</td><td>${Number(t.score || 0).toFixed(1)}<div class="rr">${escapeHtml(t.failure_reason || '')}</div><div class="rr">${escapeHtml(t.protected_reason || '')}</div></td></tr>`).join('');
+}
+
+async function loadBacktestRun(runId) {
+  if (!runId) return;
+  const note = document.getElementById('researchNote');
+  note.textContent = 'Opening full backtest history...';
+  try {
+    const res = await fetch(`/api/backtest/run/${runId}`);
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Could not open backtest history');
+    const run = data.run || {};
+    const metrics = data.metrics || {};
+    renderBacktestTrades(data.trades || [], `Full backtest history #${run.id}`, `${escapeHtml(run.market || '')}/${escapeHtml(run.horizon || '')} · ${escapeHtml(run.start_date || '')} → ${escapeHtml(run.end_date || '')} · ${data.trades.length || 0} historical simulated decisions using real price data`);
+    renderResearchDetails({per_stock: data.per_stock || [], recent_lessons: []});
+    const skipped = metrics.skipped_symbols || [];
+    const quality = metrics.quality_filter || {};
+    const strict = metrics.strict_learning || {};
+    const counts = strict.rejection_counts || {};
+    const dup = metrics.duplicate_protection || {};
+    const duplicateText = run.learning_applied === false || dup.duplicate_found ? ' Duplicate protection: this did not add extra learning.' : '';
+    const countText = Object.entries(counts).length ? ' Rejection reasons: ' + Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join(', ') + '.' : '';
+    const zeroText = Number(run.total_trades || 0) === 0 ? ' No trades were simulated because every setup was rejected by quality/strict filters.' : '';
+    const rerunInfo = run.rerun_info || {};
+    const rerunText = rerunInfo.is_rerun
+      ? ` This is a rerun of #${rerunInfo.previous_run_id} (${rerunInfo.verdict.replace('_',' ')}${rerunInfo.delta_profit_factor !== null && rerunInfo.delta_profit_factor !== undefined ? ', profit factor ' + (rerunInfo.delta_profit_factor >= 0 ? '+' : '') + rerunInfo.delta_profit_factor.toFixed(3) : ''}).`
+      : '';
+    note.textContent = `Opened full backtest #${run.id}. ${run.total_trades || 0} trades tested. Quality filter: ${quality.enabled === false ? 'off' : 'on'}; skipped ${skipped.length || 0} unavailable/illiquid symbols. Tested with warnings: ${strict.watch_only_setups_tested || 0}.${countText}${zeroText}${duplicateText}${rerunText} This is a past simulation using real historical prices, not future picks.`;
+    document.getElementById('backtestTradesCard').scrollIntoView({behavior:'smooth', block:'start'});
+  } catch(e) {
+    note.textContent = 'Could not open backtest history: ' + e.message;
+  }
+}
+
+function toggleCustomDateRange() {
+  const isCustom = document.getElementById('btLookback').value === 'custom';
+  document.getElementById('btCustomStartWrap').style.display = isCustom ? '' : 'none';
+  document.getElementById('btCustomEndWrap').style.display = isCustom ? '' : 'none';
+}
+
+function resolveBacktestDateRange() {
+  const lookback = document.getElementById('btLookback') ? document.getElementById('btLookback').value : '3';
+  if (lookback === 'custom') {
+    const start = document.getElementById('btStartDate').value;
+    const end = document.getElementById('btEndDate').value;
+    return { start_date: start || undefined, end_date: end || undefined };
+  }
+  const years = Number(lookback || 3);
+  const end = new Date();
+  const start = new Date();
+  start.setFullYear(end.getFullYear() - years);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  return { start_date: fmt(start), end_date: fmt(end) };
+}
+
+async function compareLearning() {
+  const btn = document.getElementById('compareLearningBtn');
+  btn.disabled = true;
+  const card = document.getElementById('learningCompareCard');
+  card.style.display = 'block';
+  document.getElementById('learningCompareVerdict').textContent = 'Running raw test, then learned test, on the same window...';
+  document.getElementById('learningCompareBody').innerHTML = '<tr><td colspan="8">Working...</td></tr>';
+  try {
+    const range = resolveBacktestDateRange();
+    const body = {
+      market: document.getElementById('btMarket').value,
+      horizon: document.getElementById('btHorizon').value,
+      universe_limit: Number(document.getElementById('btUniverse').value || 40),
+      top_n: Number(document.getElementById('btTopN').value || 5),
+      rebalance_step_days: Number(document.getElementById('btStep').value || 5),
+      start_date: range.start_date,
+      end_date: range.end_date
+    };
+    const res = await fetch('/api/backtest/compare-learning', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Comparison failed');
+    const fmt = (v, suffix) => (v === null || v === undefined) ? '—' : (Number(v).toFixed(v === data.raw.total_trades ? 0 : 2) + (suffix || ''));
+    const row = (label, r) => `<tr>
+      <td>${label}</td>
+      <td>${r.total_trades ?? '—'}</td>
+      <td>${r.win_rate_pct != null ? Number(r.win_rate_pct).toFixed(1) + '%' : '—'}</td>
+      <td>${r.expectancy_pct != null ? Number(r.expectancy_pct).toFixed(3) + '%' : '—'}</td>
+      <td>${r.sharpe != null ? Number(r.sharpe).toFixed(2) : '—'}</td>
+      <td>${r.sortino != null ? Number(r.sortino).toFixed(2) : '—'}</td>
+      <td>${r.profit_factor != null ? Number(r.profit_factor).toFixed(3) : '—'}</td>
+      <td>${r.max_drawdown_pct != null ? Number(r.max_drawdown_pct).toFixed(2) + '%' : '—'}</td>
+    </tr>`;
+    document.getElementById('learningCompareBody').innerHTML = row('Raw (no learning)', data.raw) + row('Learned (all lessons applied)', data.learned);
+    const verdictLabels = {
+      learning_helped_and_crossed_breakeven: '✅ Learning helped and crossed into net-profitable (profit factor ≥ 1.0) on this window.',
+      learning_helped_and_stayed_profitable: '✅ Learning helped further and stayed net-profitable on this window.',
+      learning_helped_but_still_net_negative: '🟡 Learning improved the result, but it is still net-losing (profit factor below 1.0) on this window.',
+      learning_made_it_worse_on_this_window: '🔴 Learning made this specific window worse -- investigate which pattern penalties are misfiring here.',
+      no_meaningful_change: '⚪ No meaningful difference between raw and learned on this window.',
+      incomplete_data: '⚠️ Not enough data to compare (one of the two runs failed or returned no trades).'
+    };
+    document.getElementById('learningCompareVerdict').textContent = verdictLabels[data.verdict] || data.verdict;
+    document.getElementById('learningCompareNote').textContent = data.plain_summary || '';
+  } catch(e) {
+    document.getElementById('learningCompareVerdict').textContent = 'Comparison error: ' + e.message;
+    document.getElementById('learningCompareBody').innerHTML = '';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runBacktest() {
+  const btn = document.getElementById('runBacktestBtn');
+  btn.disabled = true;
+  document.getElementById('researchNote').textContent = 'Testing old market days now. This is not making tomorrow’s picks; it is checking what would have worked in the past...';
+  try {
+    const range = resolveBacktestDateRange();
+    const body = {
+      market: document.getElementById('btMarket').value,
+      horizon: document.getElementById('btHorizon').value,
+      universe_limit: Number(document.getElementById('btUniverse').value || 40),
+      top_n: Number(document.getElementById('btTopN').value || 5),
+      rebalance_step_days: Number(document.getElementById('btStep').value || 5),
+      learning_mode: document.getElementById('btLearningMode') ? document.getElementById('btLearningMode').value : 'raw',
+      start_date: range.start_date,
+      end_date: range.end_date
+    };
+    const res = await fetch('/api/backtest/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Backtest failed');
+    document.getElementById('researchSummary').style.display = 'grid';
+    document.getElementById('btTrades').textContent = data.total_trades || 0;
+    document.getElementById('btWinRate').textContent = data.win_rate_pct !== null && data.win_rate_pct !== undefined ? Number(data.win_rate_pct).toFixed(1) + '%' : '—';
+    document.getElementById('btExpectancy').textContent = data.expectancy_pct !== null && data.expectancy_pct !== undefined ? Number(data.expectancy_pct).toFixed(3) + '%' : '—';
+    document.getElementById('btSharpe').textContent = data.sharpe !== null && data.sharpe !== undefined ? Number(data.sharpe).toFixed(2) : '—';
+    document.getElementById('btSortino').textContent = data.sortino !== null && data.sortino !== undefined ? Number(data.sortino).toFixed(2) : '—';
+    document.getElementById('btDD').textContent = data.max_drawdown_pct !== null && data.max_drawdown_pct !== undefined ? Number(data.max_drawdown_pct).toFixed(2) + '%' : '—';
+    document.getElementById('btPF').textContent = data.profit_factor !== null && data.profit_factor !== undefined ? Number(data.profit_factor).toFixed(2) : '—';
+    const skippedSymbols = data.skipped_symbols || [];
+    const skippedText = skippedSymbols.length ? ` Skipped ${skippedSymbols.length} unavailable/old symbols: ${skippedSymbols.slice(0, 5).map(s => s.ticker).join(', ')}${skippedSymbols.length > 5 ? '...' : ''}.` : '';
+    const duplicateInfo = (data.duplicate_protection || {}).duplicate_found || data.duplicate_cached ? ' Exact same test already existed, so old result was shown and learning was not double-counted.' : ' Learning rules updated for future scans.';
+    document.getElementById('researchNote').textContent = `Past test complete. ${data.total_trades || 0} old trades checked, average result ${data.expectancy_pct ?? '—'}%, worst fall ${data.max_drawdown_pct ?? '—'}%.${duplicateInfo}${skippedText}`;
+    renderResearchDetails({per_stock: data.stock_stats || [], recent_lessons: []});
+    const trades = data.recent_trades || [];
+    renderBacktestTrades(trades, data.run_id ? `Latest backtest sample #${data.run_id}` : 'Latest backtest sample', `${trades.length} recent historical decisions shown here. Entry/exit prices come from real historical candles; the buy/sell decision is simulated.`);
+    await loadResearch();
+  } catch(e) {
+    document.getElementById('researchNote').textContent = 'Backtest error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadPaperAutoStatus() {
+  const note = document.getElementById('paperAutoNote');
+  if (!note) return;
+  try {
+    const res = await fetch('/api/paper-auto');
+    const data = await res.json();
+    const a = data.auto_state || {};
+    const cfg = a.config || {};
+    const running = !!(a.running || a.thread_alive);
+    const last = a.last_checked_at || a.last_run_at || (a.last_result || {}).finished_at;
+    const next = running && last ? addSecondsIso(last, cfg.interval_seconds || 300) : null;
+    const skipped = ((a.last_result || {}).skipped || []);
+    const firstSkip = skipped[0] || {};
+    const session = firstSkip.session || {};
+    const marketState = session.state || (running ? 'waiting' : 'stopped');
+    note.textContent = `Paper auto: ${running ? 'running' : 'stopped'} · markets ${((cfg.markets||[]).join(', ') || '—')} · horizons ${((cfg.horizons||[]).join(', ') || '—')} · intraday ${((cfg.intraday_markets||[]).join(', ') || '—')} · last orders ${a.last_orders || 0}. ${a.last_message || cfg.separate_learning_policy || ''}`;
+    setText('paperAutoRunning', running ? 'Running' : 'Stopped');
+    setStatusClass('paperAutoRunning', running ? 'status-running' : 'status-stopped');
+    setText('paperAutoRunningDetail', running ? 'Paper cycles will repeat automatically.' : 'Click Start paper auto to keep checking.');
+    setText('paperAutoLastChecked', last ? shortTime(last) : 'Never');
+    setText('paperAutoLastMsg', a.last_error ? `Error: ${a.last_error}` : (a.last_message || 'No completed paper cycle yet.'));
+    setText('paperAutoNextCheck', next ? shortTime(next) : '—');
+    setText('paperAutoInterval', `Interval: ${cfg.interval_seconds || 300}s · Checks: ${a.check_count || 0}`);
+    setText('paperAutoMarketState', friendlySessionState(marketState));
+    setStatusClass('paperAutoMarketState', ['open_ready','opening_wait'].includes(marketState) ? 'status-running' : (running ? 'status-stopped' : 'status-closed'));
+    setText('paperAutoMarketDetail', firstSkip.reason || (running ? 'Waiting for next eligible market cycle.' : 'Scheduler is not running.'));
+
+    const paperRuns = data.recent_runs || a.recent_runs || [];
+    const paperCard = document.getElementById('paperAutoRunsCard');
+    const paperBody = document.getElementById('paperAutoRunsBody');
+    if (paperCard && paperBody) {
+      paperCard.style.display = paperRuns.length ? 'block' : 'none';
+      paperBody.innerHTML = paperRuns.map(r => {
+        const skipped = r.skipped_count ?? (((r.result_json || {}).skipped || []).length) ?? 0;
+        return `<tr>
+          <td>${r.finished_at ? fmtISTDateTime(r.finished_at) : '—'}</td>
+          <td>${escapeHtml(r.trigger || '')}</td>
+          <td>${r.daily_week_count ?? 0}</td>
+          <td>${r.intraday_count ?? 0}</td>
+          <td>${r.order_count ?? r.orders_created ?? 0}</td>
+          <td>${r.exit_count ?? r.exits_closed ?? 0}</td>
+          <td>${skipped}</td>
+          <td><div class="reason-cell">${escapeHtml(r.message || '')}</div></td>
+        </tr>`;
+      }).join('');
+    }
+  } catch(e) {
+    note.textContent = 'Could not load paper auto status: ' + e.message;
+    showToast('Paper auto status failed', e.message, 'error');
+  }
+}
+
+async function runPaperAutoOnce() {
+  const note = document.getElementById('paperAutoNote');
+  note.textContent = 'Running one paper auto cycle for daily/week and intraday...';
+  try {
+    await saveTradingSettings(true);
+    const res = await fetch('/api/paper-auto/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Paper auto run failed');
+    const r = data.result || {};
+    note.textContent = r.message || 'Paper auto cycle completed.';
+    showToast('Full paper cycle complete', note.textContent, 'success');
+    await loadTrading();
+    if (document.getElementById('intradayView') && document.getElementById('intradayView').style.display !== 'none') await loadIntraday();
+  } catch(e) {
+    note.textContent = 'Paper auto error: ' + e.message;
+    showToast('Paper auto error', e.message, 'error');
+  }
+}
+
+async function startPaperAuto() {
+  const note = document.getElementById('paperAutoNote');
+  note.textContent = 'Starting paper auto scheduler...';
+  try {
+    await saveTradingSettings(true);
+    const res = await fetch('/api/paper-auto/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.message || data.error || 'Could not start paper auto');
+    note.textContent = data.message || 'Paper auto started.';
+    showToast('Paper auto started', note.textContent, 'success');
+    await loadPaperAutoStatus();
+  } catch(e) {
+    note.textContent = 'Paper auto error: ' + e.message;
+    showToast('Paper auto error', e.message, 'error');
+  }
+}
+
+async function stopPaperAuto() {
+  const note = document.getElementById('paperAutoNote');
+  note.textContent = 'Stopping paper auto scheduler...';
+  try {
+    const res = await fetch('/api/paper-auto/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.message || data.error || 'Could not stop paper auto');
+    note.textContent = data.message || 'Paper auto stopped.';
+    showToast('Paper auto stopped', note.textContent, 'warn');
+    await loadPaperAutoStatus();
+  } catch(e) {
+    note.textContent = 'Paper auto error: ' + e.message;
+    showToast('Paper auto error', e.message, 'error');
+  }
+}
+
+async function loadTrading() {
+  try {
+    const res = await fetch(`/api/trading?market=${encodeURIComponent(market)}&horizon=${encodeURIComponent(horizon)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    renderTrading(data);
+    loadPaperAutoStatus();
+  } catch(e) {
+    document.getElementById('tradingNote').textContent = 'Could not load trading automation: ' + e.message;
+  }
+}
+
+function renderTrading(data) {
+  const s = data.settings || {};
+  document.getElementById('trEnabled').value = s.enabled ? 'true' : 'false';
+  document.getElementById('trMode').value = s.mode || 'paper';
+  document.getElementById('trCapital').value = s.capital_inr || 5000;
+  document.getElementById('trCapitalUsd').value = s.capital_usd || 1000;
+  document.getElementById('trMaxOpen').value = s.max_open_positions || 3;
+  document.getElementById('trMaxPos').value = s.max_position_pct || 25;
+  document.getElementById('trRisk').value = s.risk_per_trade_pct || 2;
+  document.getElementById('trConf').value = s.min_confidence || 65;
+  document.getElementById('trRR').value = s.min_risk_reward || 1.5;
+  document.getElementById('trWeeklyTarget').value = s.weekly_profit_target_pct || 10;
+  document.getElementById('trWeeklyLoss').value = s.max_weekly_loss_pct || 4;
+  document.getElementById('trCoverApi').value = s.cover_api_costs_from_profit ? 'true' : 'false';
+  document.getElementById('trBrokerApiCost').value = s.broker_api_monthly_cost_inr || 0;
+  document.getElementById('trStopTarget').value = s.stop_after_weekly_target ? 'true' : 'false';
+  document.getElementById('trOpenConfirm').value = s.opening_confirmation_enabled ? 'true' : 'false';
+  document.getElementById('trOpenWait').value = s.opening_wait_minutes ?? 15;
+  document.getElementById('trMaxChase').value = s.opening_max_entry_chase_pct ?? 1.25;
+  document.getElementById('trMaxPullback').value = s.opening_max_entry_pullback_pct ?? 1;
+  document.getElementById('trProfitProtect').value = s.profit_protection_enabled ? 'true' : 'false';
+  document.getElementById('trProtectProgress').value = s.profit_protect_progress_pct ?? 50;
+  document.getElementById('trTrailActivate').value = s.trailing_stop_activation_pct ?? 40;
+  document.getElementById('trTrailGiveback').value = s.trailing_stop_giveback_pct ?? 35;
+  document.getElementById('trExitHorizon').value = s.exit_at_horizon_end ? 'true' : 'false';
+  const g = data.goal_status || {};
+  document.getElementById('tradeSummary').style.display = 'grid';
+  document.getElementById('tradeOpen').textContent = (data.summary && data.summary.open_positions) || 0;
+  document.getElementById('tradePnl').textContent = '₹' + Number((data.summary && data.summary.realised_pnl) || 0).toFixed(2);
+  document.getElementById('tradeMode').textContent = s.mode || 'paper';
+  document.getElementById('tradeBroker').textContent = data.broker_configured ? 'Yes' : 'No';
+  document.getElementById('tradeWeekNet').textContent = '₹' + Number(g.net_after_api_inr || 0).toFixed(2);
+  document.getElementById('tradeGoal').textContent = `${Number(g.progress_pct || 0).toFixed(0)}%`;
+  document.getElementById('tradeApiCover').textContent = g.api_costs_covered ? 'Yes' : 'No';
+  document.getElementById('tradeGuard').textContent = g.can_open_new_trades ? 'Open' : 'Paused';
+  document.getElementById('tradeWeeklyCost').textContent = '₹' + Number(g.api_cost_inr || 0).toFixed(2);
+  const os = data.opening_status || {};
+  document.getElementById('tradeOpeningState').textContent = os.state ? os.state.replaceAll('_',' ') : '—';
+  document.getElementById('tradeExitEngine').textContent = s.profit_protection_enabled ? 'Post-entry risk + profit protect' : 'Target/stop only';
+  const goalLine = `Weekly goal: net ₹${Number(g.net_after_api_inr || 0).toFixed(2)} / ₹${Number(g.target_profit_inr || 0).toFixed(2)} after total API cost ₹${Number(g.api_cost_inr || 0).toFixed(2)}. ${g.profit_target_policy || 'Target is a milestone, not a ceiling.'} ${g.halt_reason ? 'Guard: ' + g.halt_reason : 'Guard open.'}`;
+  const openingLine = os.state ? ` Opening gate: ${os.state.replaceAll('_',' ')}; ready after ${os.ready_time ? fmtISTTime(os.ready_time) : 'configured wait'}.` : '';
+  const policy = data.execution_policy ? ` Claude is optional for review/control; execution remains bounded by rule-based opening confirmation, cost gates, stop-loss, post-entry risk recheck, stop tightening, and profit-protection exits.` : '';
+  document.getElementById('tradingNote').textContent = goalLine + openingLine + policy + ' ' + (data.regulatory_notice || 'Paper mode is safest for testing automation.');
+
+  const positions = data.positions || [];
+  document.getElementById('positionsCard').style.display = positions.length ? 'block' : 'none';
+  document.getElementById('positionsBody').innerHTML = positions.map(p => {
+    const sym = p.currency_symbol || (p.market === 'IN' ? '₹' : '$');
+    return `<tr>
+      <td><div class="ticker-name">${escapeHtml(p.ticker)}</div><div class="co-sub">${escapeHtml(p.company||'')}</div></td>
+      <td>${escapeHtml(p.market)}</td><td>${p.quantity}</td>
+      <td>${fmtMoney(p.entry_price, sym)}</td><td>${fmtMoney(p.target_price, sym)}</td><td>${fmtMoney(p.stop_price, sym)}</td>
+      <td>${escapeHtml(p.status)}<div class="rr">${escapeHtml(p.exit_reason || '')}</div></td>
+      <td>${pnlNetGrossHtml(p, sym)}</td>
+    </tr>`;
+  }).join('');
+
+  const checks = data.entry_checks || [];
+  document.getElementById('entryChecksCard').style.display = checks.length ? 'block' : 'none';
+  document.getElementById('entryChecksBody').innerHTML = checks.map(c => {
+    const snap = c.snapshot || {};
+    return `<tr>
+      <td><div class="ticker-name">${escapeHtml(c.ticker)}</div><div class="co-sub">${escapeHtml(c.company||'')}</div></td>
+      <td>${c.allowed ? 'Approved' : 'Blocked'}</td>
+      <td>${escapeHtml(c.reason || '')}</td>
+      <td>${snap.last ? Number(snap.last).toFixed(2) : '—'}</td>
+      <td>${escapeHtml(snap.recent_trend || '—')}</td>
+    </tr>`;
+  }).join('');
+
+  const runLogs = data.recent_auto_runs || [];
+  const runLogsCard = document.getElementById('tradingRunLogsCard');
+  const runLogsBody = document.getElementById('tradingRunLogsBody');
+  if (runLogsCard && runLogsBody) {
+    runLogsCard.style.display = runLogs.length ? 'block' : 'none';
+    runLogsBody.innerHTML = runLogs.map(r => {
+      const msg = r.message || ((r.result_json || {}).message) || ((r.result_json || {}).error) || '';
+      return `<tr>
+        <td>${r.finished_at ? fmtISTDateTime(r.finished_at) : '—'}</td>
+        <td>${escapeHtml(r.trigger || '')}</td>
+        <td>${escapeHtml(r.market || '')}</td>
+        <td>${escapeHtml(r.horizon || '')}</td>
+        <td>${escapeHtml(r.mode || '')}</td>
+        <td>${escapeHtml(String(r.session_state || '').replaceAll('_',' '))}</td>
+        <td>${r.entry_check_count ?? 0}</td>
+        <td>${r.approved_count ?? 0}</td>
+        <td>${r.order_count ?? 0}</td>
+        <td>${r.exit_count ?? 0}</td>
+        <td><div class="reason-cell">${escapeHtml(msg)}</div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const orders = data.orders || [];
+  document.getElementById('ordersCard').style.display = orders.length ? 'block' : 'none';
+  document.getElementById('ordersBody').innerHTML = orders.map(o => {
+    const sym = o.currency_symbol || (o.market === 'IN' ? '₹' : '$');
+    return `<tr>
+      <td>${o.created_at ? fmtISTDateTime(o.created_at) : '—'}</td>
+      <td><div class="ticker-name">${escapeHtml(o.ticker)}</div><div class="co-sub">${escapeHtml(o.company||'')}</div></td>
+      <td>${escapeHtml(o.side)}</td><td>${o.quantity}</td><td>${fmtMoney(o.limit_price, sym)}</td>
+      <td>${escapeHtml(o.status)}</td><td>${escapeHtml(o.mode)}</td><td><div class="reason-cell">${escapeHtml(o.risk_notes || o.rationale || '')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveTradingSettings(silent=false) {
+  const body = {
+    enabled: document.getElementById('trEnabled').value === 'true',
+    mode: document.getElementById('trMode').value,
+    capital_inr: Number(document.getElementById('trCapital').value || 5000),
+    capital_usd: Number(document.getElementById('trCapitalUsd').value || 1000),
+    max_open_positions: Number(document.getElementById('trMaxOpen').value || 3),
+    max_position_pct: Number(document.getElementById('trMaxPos').value || 25),
+    risk_per_trade_pct: Number(document.getElementById('trRisk').value || 2),
+    min_confidence: Number(document.getElementById('trConf').value || 65),
+    min_risk_reward: Number(document.getElementById('trRR').value || 1.5),
+    weekly_profit_target_pct: Number(document.getElementById('trWeeklyTarget').value || 10),
+    max_weekly_loss_pct: Number(document.getElementById('trWeeklyLoss').value || 4),
+    cover_api_costs_from_profit: document.getElementById('trCoverApi').value === 'true',
+    broker_api_monthly_cost_inr: Number(document.getElementById('trBrokerApiCost').value || 0),
+    stop_after_weekly_target: document.getElementById('trStopTarget').value === 'true',
+    opening_confirmation_enabled: document.getElementById('trOpenConfirm').value === 'true',
+    opening_wait_minutes: Number(document.getElementById('trOpenWait').value || 15),
+    opening_max_entry_chase_pct: Number(document.getElementById('trMaxChase').value || 1.25),
+    opening_max_entry_pullback_pct: Number(document.getElementById('trMaxPullback').value || 1),
+    profit_protection_enabled: document.getElementById('trProfitProtect').value === 'true',
+    profit_protect_progress_pct: Number(document.getElementById('trProtectProgress').value || 50),
+    trailing_stop_activation_pct: Number(document.getElementById('trTrailActivate').value || 40),
+    trailing_stop_giveback_pct: Number(document.getElementById('trTrailGiveback').value || 35),
+    exit_at_horizon_end: document.getElementById('trExitHorizon').value === 'true'
+  };
+  try {
+    const res = await fetch('/api/trading/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save settings');
+    if (!silent) {
+      document.getElementById('tradingNote').textContent = data.notice || 'Trading settings saved.';
+      showToast('Trading settings saved', data.notice || 'Trading automation settings saved.', 'success');
+      await loadTrading();
+    }
+    return data;
+  } catch(e) {
+    document.getElementById('tradingNote').textContent = 'Error: ' + e.message;
+    showToast('Trading automation error', e.message, 'error');
+    if (silent) throw e;
+    return null;
+  }
+}
+
+async function runTradingAutomation() {
+  const btn = document.getElementById('runTradingBtn');
+  btn.disabled = true;
+  document.getElementById('tradingNote').textContent = 'Running automation against the locked scan and checking open positions...';
+  try {
+    await saveTradingSettings(true);
+    const res = await fetch('/api/trading/run', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ market, horizon }) });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Automation failed');
+    const created = (data.orders || []).length;
+    const closed = data.exits && data.exits.closed ? data.exits.closed.length : 0;
+    const g = data.goal_status || {};
+    const checked = (data.entry_checks || []).length;
+    document.getElementById('tradingNote').textContent = `${created} new order(s), ${closed} position exit(s), ${checked} opening check(s). ${data.message || ''} Weekly net after API: ₹${Number(g.net_after_api_inr || 0).toFixed(2)} / target ₹${Number(g.target_profit_inr || 0).toFixed(2)}.`;
+    showToast('Trading automation complete', `${created} order(s), ${closed} exit(s), ${checked} check(s).`, 'success');
+    await loadTrading();
+  } catch(e) {
+    document.getElementById('tradingNote').textContent = 'Error: ' + e.message;
+    showToast('Trading automation error', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
+async function loadIntraday() {
+  try {
+    const res = await fetch('/api/intraday');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    renderIntraday(data);
+  } catch(e) {
+    document.getElementById('intradayNote').textContent = 'Could not load intraday engine: ' + e.message;
+  }
+}
+
+function formatDataSourceLabel(ds) {
+  if (!ds) return '—';
+  if (typeof ds === 'string') return ds || '—';
+  const label = ds.source_label || ds.source_name || ds.data_source || ds.provider || ds.actual_provider || '—';
+  const freshness = ds.freshness ? String(ds.freshness).replaceAll('_',' ') : '';
+  return freshness && label !== '—' ? `${label} · ${freshness}` : label;
+}
+
+function renderIntraday(data) {
+  const s = data.settings || {};
+  const ts = data.trading_settings || {};
+  document.getElementById('intraEnabled').value = s.enabled ? 'true' : 'false';
+  document.getElementById('intraMarket').value = s.market || 'IN';
+  document.getElementById('intraExecutionMode').value = s.execution_mode || 'paper';
+  document.getElementById('intraClaudeMode').value = s.claude_control_mode || 'off';
+  document.getElementById('intraClaudeMaxReviews').value = s.claude_max_reviews_per_run ?? 5;
+  document.getElementById('intraClaudeMinConfidence').value = s.claude_min_confidence ?? 70;
+  document.getElementById('intraClaudeTarget').value = s.claude_target_instruction || 'Maximize net expectancy after all costs. Prefer no trade over a weak trade.';
+  document.getElementById('intraSimCapital').value = s.simulation_capital_inr ?? ts.capital_inr ?? 5000;
+  document.getElementById('intraSimCapitalUsd').value = s.simulation_capital_usd ?? ts.capital_usd ?? 1000;
+  document.getElementById('intraConfirm').value = s.require_confirmation ? 'true' : 'false';
+  document.getElementById('intraAutoEnabled').value = s.auto_enabled ? 'true' : 'false';
+  document.getElementById('intraAutoInterval').value = s.auto_interval_seconds ?? 300;
+  document.getElementById('intraOpenWait').value = s.opening_wait_minutes ?? 15;
+  document.getElementById('intraUniverse').value = s.universe_limit ?? 60;
+  document.getElementById('intraMaxCandidates').value = s.max_candidates ?? 8;
+  document.getElementById('intraScore').value = s.min_score ?? 70;
+  document.getElementById('intraPriceFilter').value = s.price_filter_enabled === false ? 'false' : 'true';
+  document.getElementById('intraMinStockPriceInr').value = s.min_stock_price_inr ?? s.min_stock_price ?? 50;
+  document.getElementById('intraMaxStockPriceInr').value = s.max_stock_price_inr ?? s.max_stock_price ?? 1500;
+  document.getElementById('intraMinPositionValueInr').value = s.min_position_value_inr ?? s.min_position_value ?? 10000;
+  document.getElementById('intraMinStockPriceUsd').value = s.min_stock_price_usd ?? 2;
+  document.getElementById('intraMaxStockPriceUsd').value = s.max_stock_price_usd ?? 250;
+  document.getElementById('intraMinPositionValueUsd').value = s.min_position_value_usd ?? 500;
+  document.getElementById('intraMinOrderQty').value = s.min_order_quantity ?? 5;
+  document.getElementById('intraMinMove').value = s.min_price_change_pct ?? 0.35;
+  document.getElementById('intraMaxChase').value = s.max_chase_pct ?? 3;
+  document.getElementById('intraVWAP').value = s.require_vwap ? 'true' : 'false';
+  document.getElementById('intraBreakout').value = s.require_opening_breakout ? 'true' : 'false';
+  document.getElementById('intraVolume').value = s.min_volume_multiplier ?? 1.2;
+  document.getElementById('intraTarget').value = s.quick_target_pct ?? 0.8;
+  document.getElementById('intraStop').value = s.max_stop_loss_pct ?? 0.6;
+  document.getElementById('intraRR').value = s.min_risk_reward ?? 1.2;
+  document.getElementById('intraMinExpectedNetInr').value = s.min_expected_net_profit_inr ?? 50;
+  document.getElementById('intraMinExpectedNetUsd').value = s.min_expected_net_profit_usd ?? 1;
+  document.getElementById('intraProfitCostRatio').value = s.min_gross_profit_to_cost_ratio ?? 1.5;
+  document.getElementById('intraMaxTrades').value = s.max_trades_per_day ?? 3;
+  document.getElementById('intraProfitBook').value = s.profit_book_pct ?? 0.45;
+  document.getElementById('intraForceExit').value = s.force_exit_before_close_minutes ?? 15;
+
+  const g = data.goal_status || {};
+  const sess = data.session || {};
+  const auto = data.auto_state || {};
+  const autoRuns = data.recent_auto_runs || auto.recent_runs || [];
+  const memoryResult = auto.last_result || {};
+  const latestLoggedRun = autoRuns.find(r => r && r.result_json && (Number(r.scanned_count || 0) > 0 || ((r.result_json.candidates || []).length || (r.result_json.watch || []).length)));
+  const loggedPayload = (latestLoggedRun && latestLoggedRun.result_json) ? latestLoggedRun.result_json : {};
+  const memoryHasScan = Number(memoryResult.scanned_count || 0) > 0 || ((memoryResult.candidates || []).length || (memoryResult.watch || []).length);
+  const lastAuto = memoryHasScan ? memoryResult : (Object.keys(loggedPayload).length ? loggedPayload : memoryResult);
+  const sourceInfo = data.data_source || lastAuto.data_source || {};
+  const sourceLabel = formatDataSourceLabel(sourceInfo);
+  const sourceNote = (sourceInfo && typeof sourceInfo === 'object' && sourceInfo.note) ? sourceInfo.note : 'Source details are attached to each engine check/candidate row.';
+  const sourceCost = (sourceInfo && typeof sourceInfo === 'object' && sourceInfo.cost) ? sourceInfo.cost : '—';
+  const sourceOfficial = (sourceInfo && typeof sourceInfo === 'object') ? (sourceInfo.official ? 'official' : 'not official/exchange-grade') : '';
+  document.getElementById('intradayDataSource').textContent = `Market data source: ${sourceLabel}. Cost: ${sourceCost}. Status: ${sourceOfficial}. ${sourceNote}`;
+  document.getElementById('intradaySummary').style.display = 'grid';
+  document.getElementById('intraSession').textContent = sess.state ? sess.state.replaceAll('_',' ') : '—';
+  document.getElementById('intraFound').textContent = (data.candidates || lastAuto.candidates || []).length;
+  document.getElementById('intraOrders').textContent = (data.orders || lastAuto.orders || []).length;
+  document.getElementById('intraWeekGuard').textContent = g.can_open_new_trades ? 'Open' : 'Paused';
+  document.getElementById('intraNet').textContent = '₹' + Number(g.net_after_api_inr || 0).toFixed(2);
+  document.getElementById('intraMode').textContent = ts.mode || s.execution_mode || 'paper';
+  document.getElementById('intraAutoState').textContent = auto.running || auto.thread_alive ? 'Running' : (s.auto_enabled ? 'Ready' : 'Manual');
+  const intraRunning = !!(auto.running || auto.thread_alive);
+  setText('intraAutoProminent', intraRunning ? 'Running' : (s.auto_enabled ? 'Ready' : 'Stopped'));
+  setStatusClass('intraAutoProminent', intraRunning ? 'status-running' : (s.auto_enabled ? 'status-stopped' : 'status-closed'));
+  setText('intraAutoDetail', intraRunning ? `Checks every ${s.auto_interval_seconds ?? 300}s while allowed.` : (s.auto_enabled ? 'Auto enabled, but worker is not running.' : 'Manual checks only.'));
+  setText('intraSessionProminent', friendlySessionState(sess.state));
+  setStatusClass('intraSessionProminent', ['open_ready','opening_wait'].includes(sess.state) ? 'status-running' : 'status-closed');
+  setText('intraSessionDetail', sess.local_now ? `Now ${shortTime(sess.local_now)} · Opens ${shortTime(sess.open_time)} · Closes ${shortTime(sess.close_time)}` : 'Session schedule unavailable.');
+  const intraLast = auto.last_run_at || lastAuto.finished_at || (data.recent_auto_runs || [])[0]?.finished_at || (data.recent_auto_runs || [])[0]?.checked_at;
+  setText('intraLastCheckedProminent', intraLast ? shortTime(intraLast) : 'Never');
+  setText('intraLastCheckMsg', auto.last_error ? `Error: ${auto.last_error}` : (auto.last_message || data.message || 'No completed check yet.'));
+  setText('intraLatestCycle', `${lastAuto.scanned_count ?? 0} scanned / ${lastAuto.eligible_count ?? lastAuto.candidate_count ?? ((lastAuto.candidates || []).length) ?? 0} eligible`);
+  setText('intraLatestCycleDetail', `Orders ${(lastAuto.order_count ?? ((lastAuto.orders || []).length) ?? 0)} · Source ${formatDataSourceLabel(lastAuto.data_source || sourceInfo)}`);
+  const noteMessage = data.message || auto.last_message || data.policy || 'Intraday engine ready.';
+  const macro = data.macro_event_risk || (data.market_context || {}).macro_event_risk || {};
+  const macroTxt = macro.enabled ? ` News/macro: ${macro.risk_level || 'normal'} (${macro.decision || 'normal'}).` : '';
+  document.getElementById('intradayNote').textContent = noteMessage + ` Weekly guard: net ₹${Number(g.net_after_api_inr || 0).toFixed(2)} / target ₹${Number(g.target_profit_inr || 0).toFixed(2)}. Auto: ${auto.running || auto.thread_alive ? 'running' : 'stopped'}. Claude control: ${(s.claude_control_mode || 'off').replaceAll('_',' ')}.` + macroTxt;
+  const lastRunText = auto.last_run_at
+    ? `Last engine check: ${fmtISTDateTime(auto.last_run_at)} · Source: ${formatDataSourceLabel(lastAuto.data_source || sourceInfo)} · ${auto.last_message || ''} · Scanned: ${lastAuto.scanned_count ?? '0'} · Candidates: ${lastAuto.eligible_count ?? lastAuto.candidate_count ?? ((lastAuto.candidates || []).length)} · Watch: ${lastAuto.watch_count ?? ((lastAuto.watch || []).length)} · Orders: ${lastAuto.order_count ?? ((lastAuto.orders || []).length)}${auto.last_error ? ' · Error: ' + auto.last_error : ''}`
+    : 'No completed engine check yet. Click “Run once now” to force an immediate visible check, or wait for the next auto interval.';
+  document.getElementById('intradayLastRun').textContent = lastRunText;
+
+  const claudeCtl = data.claude_control || lastAuto.claude_control || {};
+  if (claudeCtl && claudeCtl.enabled) {
+    const ctlStatus = claudeCtl.used ? `Claude reviewed candidates with ${claudeCtl.model || 'Claude'}` : `Claude control enabled but not used`;
+    document.getElementById('intradayLastRun').textContent += ` · ${ctlStatus}${claudeCtl.error ? ' · Claude error: ' + claudeCtl.error : ''}${claudeCtl.note ? ' · ' + claudeCtl.note : ''}`;
+  }
+
+  const exp = data.expectancy || {};
+  const overallExp = exp.overall || {};
+  const policyExp = exp.policy || {};
+  const expSym = (s.market || 'IN') === 'IN' ? '₹' : '$';
+  const expNet = overallExp.net_pnl;
+  const expNetCls = Number(expNet || 0) >= 0 ? 'status-running' : 'status-closed';
+  setText('intraExpNetPnl', expNet !== null && expNet !== undefined ? fmtMoney(expNet, expSym) : '—');
+  setStatusClass('intraExpNetPnl', expNetCls);
+  setText('intraExpGrossCost', `Gross ${fmtMoney(overallExp.gross_pnl || 0, expSym)} · Costs ${fmtMoney(overallExp.total_costs || 0, expSym)}`);
+  setText('intraExpWinRate', overallExp.win_rate_pct !== null && overallExp.win_rate_pct !== undefined ? `${Number(overallExp.win_rate_pct).toFixed(1)}%` : '—');
+  setText('intraExpTrades', `${overallExp.closed_trades || 0} closed · ${overallExp.winning_trades || 0} wins / ${overallExp.losing_trades || 0} losses`);
+  setText('intraExpAvgNet', overallExp.avg_net_per_trade !== null && overallExp.avg_net_per_trade !== undefined ? fmtMoney(overallExp.avg_net_per_trade, expSym) : '—');
+  setText('intraExpAvgWinLoss', `Avg win ${overallExp.avg_net_win !== null && overallExp.avg_net_win !== undefined ? fmtMoney(overallExp.avg_net_win, expSym) : '—'} · Avg loss ${overallExp.avg_net_loss !== null && overallExp.avg_net_loss !== undefined ? fmtMoney(overallExp.avg_net_loss, expSym) : '—'}`);
+  setText('intraExpProfitFactor', overallExp.profit_factor !== null && overallExp.profit_factor !== undefined ? Number(overallExp.profit_factor).toFixed(2) : '—');
+  setText('intraExpPolicy', `Gate: net ≥ ₹${Number(policyExp.india_min_expected_net_profit || 0).toFixed(0)} / $${Number(policyExp.us_min_expected_net_profit || 0).toFixed(2)}, gross/cost ≥ ${Number(policyExp.min_gross_profit_to_cost_ratio || 0).toFixed(1)}×`);
+  document.getElementById('intradayExpectancyNote').textContent = exp.error ? `Expectancy error: ${exp.error}` : (overallExp.warning || exp.note || policyExp.rule || 'Net expectancy uses estimated full trade costs.');
+  const exitRows = overallExp.by_exit_reason || [];
+  document.getElementById('intradayExpectancyExitBody').innerHTML = exitRows.length ? exitRows.map(x => `<tr>
+    <td>${escapeHtml(x.reason || 'UNKNOWN')}</td>
+    <td>${x.count || 0}</td>
+    <td><span class="gain-pct ${Number(x.net_pnl || 0) >= 0 ? 'up' : 'dn'}">${fmtMoney(x.net_pnl || 0, expSym)}</span></td>
+    <td>${fmtMoney(x.gross_pnl || 0, expSym)}</td>
+    <td>${fmtMoney(x.costs || 0, expSym)}</td>
+    <td>${fmtMoney(x.avg_net || 0, expSym)}</td>
+  </tr>`).join('') : `<tr><td colspan="6"><div class="reason-cell">No closed intraday trades yet. Run paper trades first, then this table will show which exit reasons are making or losing money after costs.</div></td></tr>`;
+
+  document.getElementById('intradayAutoRunsCard').style.display = autoRuns.length ? 'block' : 'none';
+  document.getElementById('intradayAutoRunsBody').innerHTML = autoRuns.map(r => {
+    const checkedAt = r.finished_at || r.checked_at || r.last_run_at;
+    const sessionState = r.session_state || (r.session || {}).state || '';
+    return `<tr>
+      <td>${checkedAt ? fmtISTDateTime(checkedAt) : '—'}</td>
+      <td>${escapeHtml(r.trigger || '')}</td>
+      <td>${escapeHtml(r.market || (r.session || {}).market || '')}</td>
+      <td>${escapeHtml(r.data_source || r.data_provider || formatDataSourceLabel((r.result_json || {}).data_source) || '—')}</td>
+      <td>${escapeHtml(String(sessionState).replaceAll('_',' '))}</td>
+      <td>${r.scanned_count ?? 0}</td>
+      <td>${r.eligible_count ?? r.candidate_count ?? 0}</td>
+      <td>${r.order_count ?? 0}</td>
+      <td><div class="reason-cell">${escapeHtml(r.message || (r.result_json || {}).message || ((r.result_json || {}).errors || []).join(', ') || '')}</div></td>
+    </tr>`;
+  }).join('');
+
+  const candidates = ((data.candidates && data.candidates.length ? data.candidates : (lastAuto.candidates || []))).concat(data.watch && data.watch.length ? data.watch : (lastAuto.watch || []));
+  document.getElementById('intradayCandidatesCard').style.display = 'block';
+  document.getElementById('intradayCandidatesBody').innerHTML = candidates.length ? candidates.map(c => {
+    const sym = c.market === 'IN' || String(c.ticker||'').endsWith('.NS') ? '₹' : '$';
+    const blocked = (c.blocked_reasons || []).join(', ');
+    return `<tr>
+      <td><div class="ticker-name">${escapeHtml(c.ticker)}</div><div class="co-sub">${escapeHtml(c.market || '')}</div></td>
+      <td title="${escapeHtml(c.score_explanation || '')}">${Number(c.score || 0).toFixed(1)}</td>
+      <td>${Number(c.change_pct || 0).toFixed(2)}%</td>
+      <td>${fmtMoney(c.last, sym)}</td>
+      <td>${c.vwap ? fmtMoney(c.vwap, sym) : '—'}</td>
+      <td>${c.breakout ? 'Yes' : 'No'}</td>
+      <td>${c.volume_multiplier ? Number(c.volume_multiplier).toFixed(2) + 'x' : '—'}</td>
+      <td>${escapeHtml(c.recent_trend || '')}</td>
+      <td>${escapeHtml(c.data_source_label || formatDataSourceLabel(c.data_source) || '—')}</td>
+      <td><div class="reason-cell">${escapeHtml(blocked || 'Eligible')}</div></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="10"><div class="reason-cell">No bullish intraday candidates to show yet. This can happen when the market is closed, the opening wait window has not finished, filters are too strict, yfinance has no 5-minute data, or the last auto interval has not completed.</div></td></tr>`;
+
+  const positions = data.positions || [];
+  document.getElementById('intradayPositionsCard').style.display = positions.length ? 'block' : 'none';
+  document.getElementById('intradayPositionsBody').innerHTML = positions.map(p => {
+    const sym = p.currency_symbol || (p.market === 'IN' ? '₹' : '$');
+    return `<tr>
+      <td><div class="ticker-name">${escapeHtml(p.ticker)}</div><div class="co-sub">${escapeHtml(p.company||'')}</div></td>
+      <td>${p.quantity}</td><td>${fmtMoney(p.entry_price, sym)}</td><td>${fmtMoney(p.target_price, sym)}</td><td>${fmtMoney(p.stop_price, sym)}</td>
+      <td>${escapeHtml(p.status)}<div class="rr">${escapeHtml(p.exit_reason || '')}</div></td>
+      <td>${pnlNetGrossHtml(p, sym)}</td>
+    </tr>`;
+  }).join('');
+
+  const orders = data.orders || [];
+  document.getElementById('intradayOrdersCard').style.display = orders.length ? 'block' : 'none';
+  document.getElementById('intradayOrdersBody').innerHTML = orders.map(o => {
+    const sym = o.currency_symbol || (o.market === 'IN' ? '₹' : '$');
+    return `<tr>
+      <td>${o.created_at ? fmtISTDateTime(o.created_at) : '—'}</td>
+      <td><div class="ticker-name">${escapeHtml(o.ticker)}</div><div class="co-sub">${escapeHtml(o.company||'')}</div></td>
+      <td>${escapeHtml(o.side)}</td><td>${o.quantity}</td><td>${fmtMoney(o.limit_price, sym)}</td>
+      <td>${escapeHtml(o.status)}</td><td>${escapeHtml(o.mode)}</td><td><div class="reason-cell">${escapeHtml(o.risk_notes || o.rationale || '')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveIntradaySettings() {
+  const body = {
+    enabled: document.getElementById('intraEnabled').value === 'true',
+    market: document.getElementById('intraMarket').value,
+    execution_mode: document.getElementById('intraExecutionMode').value,
+    claude_control_mode: document.getElementById('intraClaudeMode').value,
+    claude_max_reviews_per_run: Number(document.getElementById('intraClaudeMaxReviews').value || 5),
+    claude_min_confidence: Number(document.getElementById('intraClaudeMinConfidence').value || 70),
+    claude_target_instruction: document.getElementById('intraClaudeTarget').value || '',
+    simulation_capital_inr: Number(document.getElementById('intraSimCapital').value || 5000),
+    simulation_capital_usd: Number(document.getElementById('intraSimCapitalUsd').value || 1000),
+    require_confirmation: document.getElementById('intraConfirm').value === 'true',
+    auto_enabled: document.getElementById('intraAutoEnabled').value === 'true',
+    auto_interval_seconds: Number(document.getElementById('intraAutoInterval').value || 300),
+    opening_wait_minutes: Number(document.getElementById('intraOpenWait').value || 15),
+    universe_limit: Number(document.getElementById('intraUniverse').value || 60),
+    max_candidates: Number(document.getElementById('intraMaxCandidates').value || 8),
+    min_score: Number(document.getElementById('intraScore').value || 70),
+    price_filter_enabled: document.getElementById('intraPriceFilter').value === 'true',
+    min_stock_price: Number(document.getElementById('intraMinStockPriceInr').value || 50),
+    max_stock_price: Number(document.getElementById('intraMaxStockPriceInr').value || 1500),
+    min_stock_price_inr: Number(document.getElementById('intraMinStockPriceInr').value || 50),
+    max_stock_price_inr: Number(document.getElementById('intraMaxStockPriceInr').value || 1500),
+    min_stock_price_usd: Number(document.getElementById('intraMinStockPriceUsd').value || 2),
+    max_stock_price_usd: Number(document.getElementById('intraMaxStockPriceUsd').value || 250),
+    min_order_quantity: Number(document.getElementById('intraMinOrderQty').value || 5),
+    min_position_value: Number(document.getElementById('intraMinPositionValueInr').value || 10000),
+    min_position_value_inr: Number(document.getElementById('intraMinPositionValueInr').value || 10000),
+    min_position_value_usd: Number(document.getElementById('intraMinPositionValueUsd').value || 500),
+    min_price_change_pct: Number(document.getElementById('intraMinMove').value || 0.35),
+    max_chase_pct: Number(document.getElementById('intraMaxChase').value || 3),
+    require_vwap: document.getElementById('intraVWAP').value === 'true',
+    require_opening_breakout: document.getElementById('intraBreakout').value === 'true',
+    min_volume_multiplier: Number(document.getElementById('intraVolume').value || 1.2),
+    quick_target_pct: Number(document.getElementById('intraTarget').value || 0.8),
+    max_stop_loss_pct: Number(document.getElementById('intraStop').value || 0.6),
+    min_risk_reward: Number(document.getElementById('intraRR').value || 1.2),
+    min_expected_net_profit_inr: Number(document.getElementById('intraMinExpectedNetInr').value || 50),
+    min_expected_net_profit_usd: Number(document.getElementById('intraMinExpectedNetUsd').value || 1),
+    min_gross_profit_to_cost_ratio: Number(document.getElementById('intraProfitCostRatio').value || 1.5),
+    max_trades_per_day: Number(document.getElementById('intraMaxTrades').value || 3),
+    profit_book_pct: Number(document.getElementById('intraProfitBook').value || 0.45),
+    force_exit_before_close_minutes: Number(document.getElementById('intraForceExit').value || 15)
+  };
+  try {
+    const res = await fetch('/api/intraday/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save intraday settings');
+    document.getElementById('intradayNote').textContent = data.notice || 'Intraday settings saved.';
+    showToast('Intraday settings saved', document.getElementById('intradayNote').textContent, 'success');
+    await loadIntraday();
+  } catch(e) {
+    document.getElementById('intradayNote').textContent = 'Error: ' + e.message;
+    showToast('Intraday settings error', e.message, 'error');
+  }
+}
+
+
+async function startIntradayAuto() {
+  const btn = document.getElementById('startIntraAutoBtn');
+  btn.disabled = true;
+  document.getElementById('intradayNote').textContent = 'Starting automatic intraday engine...';
+  try {
+    await saveIntradaySettings();
+    const res = await fetch('/api/intraday/auto/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({}) });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.message || data.error || 'Could not start auto mode');
+    document.getElementById('intradayNote').textContent = data.message || 'Intraday auto mode started.';
+    showToast('Intraday auto started', document.getElementById('intradayNote').textContent, 'success');
+    await loadIntraday();
+  } catch(e) {
+    document.getElementById('intradayNote').textContent = 'Auto start error: ' + e.message;
+    showToast('Intraday auto start error', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function stopIntradayAuto() {
+  const btn = document.getElementById('stopIntraAutoBtn');
+  btn.disabled = true;
+  document.getElementById('intradayNote').textContent = 'Stopping automatic intraday engine...';
+  try {
+    const res = await fetch('/api/intraday/auto/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({}) });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.message || data.error || 'Could not stop auto mode');
+    document.getElementById('intradayNote').textContent = data.message || 'Intraday auto mode stopped.';
+    showToast('Intraday auto stopped', document.getElementById('intradayNote').textContent, 'warn');
+    await loadIntraday();
+  } catch(e) {
+    document.getElementById('intradayNote').textContent = 'Auto stop error: ' + e.message;
+    showToast('Intraday auto stop error', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runIntradayEngine() {
+  const btn = document.getElementById('runIntradayBtn');
+  btn.disabled = true;
+  document.getElementById('intradayNote').textContent = 'Scanning bullish intraday setups, checking exits, then applying Claude control if enabled...';
+  try {
+    const res = await fetch('/api/intraday/run', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({trigger:'manual-button'}) });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Intraday run failed');
+    renderIntraday(data);
+    showToast('Intraday check complete', data.message || 'Manual intraday cycle finished.', 'success');
+  } catch(e) {
+    document.getElementById('intradayNote').textContent = 'Error: ' + e.message;
+    showToast('Intraday check error', e.message, 'error');
+    showToast('Intraday settings error', e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
+async function loadTradeHistory() {
+  try {
+    const source = document.getElementById('histSource') ? document.getElementById('histSource').value : 'all';
+    const marketFilter = document.getElementById('histMarket') ? document.getElementById('histMarket').value : 'all';
+    const mode = document.getElementById('histMode') ? document.getElementById('histMode').value : 'all';
+    const qs = new URLSearchParams({ source, market: marketFilter, mode, limit: '120' });
+    const res = await fetch('/api/trade-history?' + qs.toString());
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    renderTradeHistory(data);
+  } catch(e) {
+    document.getElementById('historyNote').textContent = 'Could not load trade history: ' + e.message;
+    document.getElementById('historyBody').innerHTML = `<tr><td colspan="12"><div class="acc-empty">Could not load history: ${escapeHtml(e.message)}</div></td></tr>`;
+  }
+}
+
+function renderTradeHistory(data) {
+  const s = data.summary || {};
+  const t = data.today || {};
+  document.getElementById('historySummary').style.display = 'grid';
+  document.getElementById('histTotal').textContent = s.total_positions || 0;
+  document.getElementById('histOpen').textContent = s.open_positions || 0;
+  document.getElementById('histRealised').textContent = '₹' + Number(s.realised_pnl || 0).toFixed(2);
+  document.getElementById('histWinRate').textContent = s.win_rate_pct !== null && s.win_rate_pct !== undefined ? s.win_rate_pct + '%' : '—';
+  document.getElementById('histToday').textContent = '₹' + Number(t.realised_pnl_today || 0).toFixed(2);
+  document.getElementById('histIntradayPnl').textContent = '₹' + Number(s.intraday_realised_pnl || 0).toFixed(2);
+  document.getElementById('histTradingPnl').textContent = '₹' + Number(s.trading_realised_pnl || 0).toFixed(2);
+  const closedNow = (data.exits && data.exits.closed ? data.exits.closed.length : 0);
+  const updatedNow = (data.exits && data.exits.updated ? data.exits.updated.length : 0);
+  document.getElementById('historyNote').textContent = `${data.policy || 'Trade history ready.'} Latest refresh updated ${updatedNow} open position(s) and closed ${closedNow} position(s) if exit rules were hit.`;
+
+  const rows = data.history || [];
+  if (!rows.length) {
+    document.getElementById('historyBody').innerHTML = '<tr><td colspan="12"><div class="acc-empty">No executed/paper positions yet. Run Trading Automation or Intraday Engine in paper mode first.</div></td></tr>';
+    return;
+  }
+  document.getElementById('historyBody').innerHTML = rows.map(r => {
+    const sym = r.currency_symbol || (r.market === 'IN' ? '₹' : '$');
+    const time = r.closed_at || r.opened_at;
+    const pnl = r.pnl_amount !== null && r.pnl_amount !== undefined ? Number(r.pnl_amount) : null;
+    const pnlCls = pnl === null ? 'nu' : (pnl >= 0 ? 'up' : 'dn');
+    const volumeText = r.volume_multiplier ? `${Number(r.volume_multiplier).toFixed(2)}x` : '—';
+    const buyLine = `${fmtMoney(r.entry_price, sym)}<div class="rr">Buy value ${fmtMoney(r.buy_value, sym)}</div>`;
+    const sellLabel = r.status === 'CLOSED' ? 'Sell' : 'Current';
+    const sellLine = `${fmtMoney(r.exit_price || r.current_price, sym)}<div class="rr">${sellLabel} value ${fmtMoney(r.sell_value, sym)}</div>`;
+    const targetStop = `${fmtMoney(r.target_price, sym)}<div class="rr">SL ${fmtMoney(r.stop_price, sym)}</div>`;
+    const values = `<div class="rr">VWAP ${r.entry_vwap ? fmtMoney(r.entry_vwap, sym) : '—'}</div><div class="rr">Score ${r.entry_score !== null && r.entry_score !== undefined ? Number(r.entry_score).toFixed(1) : '—'}</div>`;
+    const pl = pnlNetGrossHtml(r, sym);
+    return `<tr>
+      <td>${time ? fmtISTDateTime(time) : '—'}</td>
+      <td>${escapeHtml(r.engine || '')}<div class="rr">${escapeHtml(r.horizon || '')}</div></td>
+      <td><div class="ticker-name">${escapeHtml(r.ticker || '')}</div><div class="co-sub">${escapeHtml(r.company || r.market || '')}</div></td>
+      <td>${escapeHtml(r.mode || '')}</td>
+      <td>${r.quantity || 0}</td>
+      <td>${buyLine}</td>
+      <td>${targetStop}</td>
+      <td>${sellLine}</td>
+      <td>${values}</td>
+      <td>${volumeText}<div class="rr">${r.last_bar_volume ? Number(r.last_bar_volume).toLocaleString() : ''}</div></td>
+      <td>${pl}</td>
+      <td>${escapeHtml(r.status || '')}<div class="rr">${escapeHtml(r.exit_reason || r.order_status || '')}</div><div class="rr">${escapeHtml(((r.metadata_json || {}).exit_engine || {}).post_entry_plain_reason || '')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+
+function setH(h) {
+  horizon = h;
+  document.getElementById('hDay').className = h === 'day' ? 'active' : '';
+  document.getElementById('hWeek').className = h === 'week' ? 'active' : '';
+  hideFirstScanButton();
+  if (document.getElementById('costsView') && document.getElementById('costsView').style.display !== 'none') loadCosts();
+  if (document.getElementById('tradingView') && document.getElementById('tradingView').style.display !== 'none') loadTrading();
+  if (document.getElementById('intradayView') && document.getElementById('intradayView').style.display !== 'none') loadIntraday();
+  if (document.getElementById('historyView') && document.getElementById('historyView').style.display !== 'none') loadTradeHistory();
+  if (document.getElementById('historyView') && document.getElementById('historyView').style.display !== 'none') loadTradeHistory();
+}
+
+
+function setM(m) {
+  market = m;
+  ['US','IN','Global'].forEach(k => {
+    document.getElementById('m' + k).className = 'mkt-btn' + (m === k ? ' active' : '');
+  });
+  hideFirstScanButton();
+  if (document.getElementById('costsView') && document.getElementById('costsView').style.display !== 'none') loadCosts();
+  if (document.getElementById('tradingView') && document.getElementById('tradingView').style.display !== 'none') loadTrading();
+  if (document.getElementById('intradayView') && document.getElementById('intradayView').style.display !== 'none') loadIntraday();
+}
+
+function confColor(c) {
+  if (c >= 70) return '#1D9E75';
+  if (c >= 50) return '#378ADD';
+  return '#EF9F27';
+}
+
+function rankClass(i) {
+  if (i === 0) return 'gold';
+  if (i <= 2) return 'silver';
+  return '';
+}
+
+function gainClass(sig) {
+  return sig === 'BUY' ? 'up' : sig === 'AVOID' ? 'dn' : 'nu';
+}
+
+async function runScan() {
+  const btn = document.getElementById('scanBtn');
+  const txt = document.getElementById('btnTxt');
+  btn.disabled = true;
+  hideFirstScanButton();
+  txt.innerHTML = '<div class="spinner"></div> Loading cache...';
+  document.getElementById('errBox').style.display = 'none';
+  document.getElementById('tableCard').style.display = 'none';
+  document.getElementById('summaryBar').style.display = 'none';
+  document.getElementById('methodologyCard').style.display = 'none';
+
+  document.getElementById('tableCard').style.display = 'block';
+  document.getElementById('tbody').innerHTML = `
+    <tr class="loading-row">
+      <td colspan="8">
+        <div class="loading-inner">
+          <div class="big-spinner"></div>
+          <div>Loading locked prediction from PostgreSQL...</div>
+          <div style="font-size:12px;color:#999;">No full-market scan or Claude call runs unless you intentionally start the first scan.</div>
+        </div>
+      </td>
+    </tr>`;
+
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market, horizon })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById('tbody').innerHTML = '';
+      document.getElementById('tableCard').style.display = 'none';
+      const eb = document.getElementById('errBox');
+      eb.style.display = 'block';
+      if (data.scan_running) {
+        eb.textContent = 'A first scan is already running for this market/horizon. The result will appear here once it is saved.';
+        pollScanStatus();
+      } else if (data.can_start_first_scan) {
+        eb.textContent = 'No locked prediction exists yet for this market/horizon. Click Run First Scan to create and lock the first prediction.';
+        showFirstScanButton(data.first_scan_label || 'Run First Scan');
+      } else {
+        eb.textContent = 'Error: ' + (data.error || 'Server error');
+      }
+      return;
+    }
+    if (data.scan_running) {
+      showFirstScanButton(data.first_scan_label || 'Run First Scan');
+    }
+    renderResults(data);
+  } catch(e) {
+    document.getElementById('tbody').innerHTML = '';
+    document.getElementById('tableCard').style.display = 'none';
+    const eb = document.getElementById('errBox');
+    eb.style.display = 'block';
+    eb.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    txt.innerHTML = 'Load Cached Scan';
+  }
+}
+
+async function startFirstScan() {
+  const fs = document.getElementById('firstScanBtn');
+  const ft = document.getElementById('firstScanTxt');
+  const btn = document.getElementById('scanBtn');
+  fs.disabled = true;
+  btn.disabled = true;
+  ft.innerHTML = '<div class="spinner"></div> Starting...';
+  document.getElementById('errBox').style.display = 'none';
+  document.getElementById('tableCard').style.display = 'block';
+  document.getElementById('tbody').innerHTML = `
+    <tr class="loading-row">
+      <td colspan="8">
+        <div class="loading-inner">
+          <div class="big-spinner"></div>
+          <div>Starting rigorous first scan...</div>
+          <div style="font-size:12px;color:#999;">This runs liquidity, momentum, technicals, fundamentals, news sentiment, and final AI ranking once, then locks the result.</div>
+        </div>
+      </td>
+    </tr>`;
+
+  try {
+    const res = await fetch('/api/start-first-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market, horizon })
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Could not start first scan');
+    if (data.status === 'complete' && data.payload) {
+      renderResults(data.payload);
+      hideFirstScanButton();
+      return;
+    }
+    ft.innerHTML = '<div class="spinner"></div> Running...';
+    pollScanStatus();
+  } catch (e) {
+    const eb = document.getElementById('errBox');
+    eb.style.display = 'block';
+    eb.textContent = 'Error: ' + e.message;
+    fs.disabled = false;
+    btn.disabled = false;
+    ft.textContent = 'Run First Scan';
+  }
+}
+
+async function pollScanStatus() {
+  const fs = document.getElementById('firstScanBtn');
+  const ft = document.getElementById('firstScanTxt');
+  const btn = document.getElementById('scanBtn');
+  try {
+    const res = await fetch('/api/scan-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market, horizon })
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Could not read scan status');
+    if (data.status === 'complete' && data.payload) {
+      renderResults(data.payload);
+      hideFirstScanButton();
+      fs.disabled = false;
+      btn.disabled = false;
+      ft.textContent = 'Run First Scan';
+      return;
+    }
+    if (data.status === 'failed') {
+      throw new Error((data.status_detail && data.status_detail.error) || 'First scan failed');
+    }
+    document.getElementById('tbody').innerHTML = `
+      <tr class="loading-row">
+        <td colspan="8">
+          <div class="loading-inner">
+            <div class="big-spinner"></div>
+            <div>First scan is running in the background...</div>
+            <div style="font-size:12px;color:#999;">The result will load here after it is saved and locked.</div>
+          </div>
+        </td>
+      </tr>`;
+    setTimeout(pollScanStatus, 8000);
+  } catch(e) {
+    const eb = document.getElementById('errBox');
+    eb.style.display = 'block';
+    eb.textContent = 'Error: ' + e.message;
+    fs.disabled = false;
+    btn.disabled = false;
+    ft.textContent = 'Run First Scan';
+  }
+}
+
+function renderMethodology(data) {
+  const card = document.getElementById('methodologyCard');
+  const counts = data.funnel_counts || {};
+  const steps = [
+    ['Universe', counts.total_universe || data.total_scanned || '—'],
+    ['Liquid', counts.liquidity_pass || '—'],
+    ['Momentum', counts.momentum_pass || '—'],
+    ['Technical', counts.technical_pass || '—'],
+    ['Deep Analysis', counts.deep_analysis || '—'],
+    ['Final Picks', counts.final_picks || (data.picks || []).length || '—']
+  ];
+  document.getElementById('funnelGrid').innerHTML = steps.map(([label, value]) => `
+    <div class="funnel-step"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>
+  `).join('');
+  const methods = ((data.methodology || {}).stages || []).map(s => `<div><b>${escapeHtml(s.stage)}:</b> ${escapeHtml(s.method)}</div>`).join('');
+  const notice = (data.methodology || {}).proprietary_methodology_notice || 'Uses public documented methods; no proprietary adviser methodology is claimed.';
+  const macro = (data.market_context || {}).macro_event_risk || {};
+  const macroLine = macro.enabled ? `<div style="margin-top:8px;"><b>News/macro safety:</b> ${escapeHtml(macro.risk_level || 'normal')} · ${escapeHtml(macro.decision || 'normal')} · ${escapeHtml(macro.note || '')}</div>` : '';
+  const macroFactors = (macro.factors || []).length ? `<div class="plain-sub">Factors watched: ${escapeHtml((macro.factors || []).map(x => Array.isArray(x) ? x[0] : x).join(' • '))}</div>` : '';
+  document.getElementById('methodologyList').innerHTML = methods + macroLine + macroFactors + `<div style="margin-top:8px;color:var(--text3);">${escapeHtml(notice)}</div>`;
+  card.style.display = 'block';
+}
+
+function renderResults(data) {
+  const picks = data.picks || [];
+  const buys = picks.filter(p => p.signal === 'BUY').length;
+  const counts = data.funnel_counts || {};
+  const cacheAge = data.cache_age_minutes !== undefined ? data.cache_age_minutes + 'm' : 'fresh';
+
+  document.getElementById('scTotal').textContent = data.total_scanned || counts.total_universe || picks.length;
+  document.getElementById('scBuy').textContent = buys;
+  document.getElementById('scGain').textContent = counts.deep_analysis || picks.length;
+  document.getElementById('scRR').textContent = data.stale ? cacheAge + ' stale' : cacheAge;
+  document.getElementById('summaryBar').style.display = 'grid';
+  renderMethodology(data);
+
+  const hLabel = horizon === 'day' ? 'Daily top picks' : 'Weekly top picks';
+  document.getElementById('tableMeta').textContent = `${hLabel} — ${market} market`;
+  const ts = new Date(data.timestamp || data.cache_updated_at || Date.now());
+  const staleText = data.stale ? ' · stale cache' : ' · cached';
+  const lockText = data.lock_status === 'current_period_locked' ? ' · locked' : ' · previous lock';
+  const acc = data.accuracy_check || {};
+  const accText = acc.updated > 0 ? ` · accuracy updated: ${acc.updated}` : (acc.skipped ? ' · accuracy already checked/no due' : '');
+  document.getElementById('tableTs').innerHTML = 'Last background scan: ' + fmtISTDateTime(ts) + `<span class="cache-pill">${escapeHtml(data.model || 'precomputed')}${staleText}${lockText}${accText}</span>`;
+
+  document.getElementById('tbody').innerHTML = picks.map((p, i) => {
+    const gCls = gainClass(p.signal);
+    const cc = confColor(p.confidence || 50);
+    const tags = (p.horizon_tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
+    const sym = p.currency_symbol || (market === 'IN' || String(p.ticker || '').endsWith('.NS') ? '₹' : '$');
+    const tp = p.target_price ? `${sym}${Number(p.target_price).toFixed(2)}` : '';
+    const sl = p.stop_price ? `${sym}${Number(p.stop_price).toFixed(2)}` : '';
+    return `<tr>
+      <td><div class="rank-circle ${rankClass(i)}">${p.rank || i+1}</div></td>
+      <td>
+        <div class="ticker-name">${escapeHtml(p.ticker)}</div>
+        <div class="co-sub" title="${escapeHtml(p.company||'')}">${escapeHtml(p.company||'')}</div>
+        <div class="tags">${tags}</div>
+      </td>
+      <td><span class="badge ${escapeHtml(p.signal)}">${escapeHtml(p.signal)}</span></td>
+      <td>
+        <div class="gain-pct ${gCls}">${escapeHtml(p.predicted_gain || '—')}</div>
+        <div class="rr">R/R: ${escapeHtml(p.risk_reward || '—')}</div>
+        <div class="rr" style="color:#999;">@ ${sym}${p.current_price ? Number(p.current_price).toFixed(2) : '—'}</div>
+      </td>
+      <td>
+        <div class="exit-block">
+          <div><span class="tp">▲ Take profit: ${escapeHtml(p.target_exit_pct||'—')}</span> <span class="tp-price">${tp}</span></div>
+          <div><span class="sl">▼ Stop loss: ${escapeHtml(p.stop_loss_pct||'—')}</span> <span class="sl-price">${sl}</span></div>
+          <div style="color:#999;margin-top:2px;">⏱ Exit by: ${escapeHtml(p.exit_date_label||'—')}</div>
+        </div>
+      </td>
+      <td>
+        <div class="conf-wrap">
+          <div class="conf-num" style="color:${cc}">${p.confidence||'?'}%</div>
+          <div class="conf-bar-track">
+            <div class="conf-bar-fill" style="width:${p.confidence||50}%;background:${cc}"></div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div class="indicators">
+          <div>${p.rsi_reading ? '<b>RSI:</b> ' + escapeHtml(p.rsi_reading) : ''}</div>
+          <div>${p.macd_reading ? '<b>MACD:</b> ' + escapeHtml(p.macd_reading) : ''}</div>
+          <div>${p.volume_reading ? '<b>Vol:</b> ' + escapeHtml(p.volume_reading) : ''}</div>
+          <div>${p.fundamental_reading ? '<b>Fund:</b> ' + escapeHtml(p.fundamental_reading) : ''}</div>
+          <div>${p.news_reading ? '<b>News:</b> ' + escapeHtml(p.news_reading) : ''}</div>
+        </div>
+      </td>
+      <td><div class="reason-cell">${escapeHtml(p.reasoning||'—')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadExportManifest() {
+  const note = document.getElementById('exportNote');
+  note.textContent = 'Loading export manifest from PostgreSQL...';
+  try {
+    const res = await fetch('/api/export/manifest');
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Could not load export manifest');
+    renderExportManifest(data);
+    exportLoaded = true;
+  } catch(e) {
+    note.textContent = 'Could not load export manifest: ' + e.message;
+    document.getElementById('exportManifestBody').innerHTML = `<tr><td colspan="4"><div class="acc-empty">${escapeHtml(e.message)}</div></td></tr>`;
+  }
+}
+
+function renderExportManifest(data) {
+  const tables = data.tables || [];
+  const preview = data.summary_preview || {};
+  const pred = preview.prediction_accuracy_overall || {};
+  const trade = preview.trade_performance_overall || {};
+  const costs = preview.api_costs_overall || {};
+  document.getElementById('exportSummary').style.display = 'grid';
+  document.getElementById('exportTables').textContent = tables.filter(t => t.exists).length;
+  document.getElementById('exportPreds').textContent = pred.total_predictions || 0;
+  document.getElementById('exportWinRate').textContent = pred.win_rate_pct !== null && pred.win_rate_pct !== undefined ? Number(pred.win_rate_pct).toFixed(1) + '%' : '—';
+  document.getElementById('exportTrades').textContent = trade.total_positions || 0;
+  document.getElementById('exportCosts').textContent = '₹' + Number(costs.cost_inr || 0).toFixed(2);
+  document.getElementById('exportNote').textContent = `Full export ready. ZIP includes manifest.json, summaries.json, and JSON+CSV for ${tables.filter(t => t.exists).length} table(s).`;
+  document.getElementById('exportManifestBody').innerHTML = tables.length ? tables.map(t => `
+    <tr>
+      <td><div class="ticker-name">${escapeHtml(t.table)}</div></td>
+      <td>${Number(t.rows || 0).toLocaleString('en-IN')}</td>
+      <td><div class="reason-cell">${escapeHtml((t.columns || []).join(', '))}</div></td>
+      <td>${t.exists ? '<span class="gain-pct up">Included</span>' : '<span class="gain-pct dn">Missing</span>'}</td>
+    </tr>`).join('') : '<tr><td colspan="4"><div class="acc-empty">No export tables found.</div></td></tr>';
+}
+
+function downloadFullExport(format) {
+  const fmt = format === 'json' ? 'json' : 'zip';
+  document.getElementById('exportNote').textContent = `Preparing full ${fmt.toUpperCase()} export. Download should start automatically...`;
+  window.location.href = `/api/export/all?format=${encodeURIComponent(fmt)}`;
+}
+
+// Keep engine status visible without requiring manual refresh.
+setInterval(() => {
+  const tradingVisible = document.getElementById('tradingView') && document.getElementById('tradingView').style.display !== 'none';
+  const intradayVisible = document.getElementById('intradayView') && document.getElementById('intradayView').style.display !== 'none';
+  if (tradingVisible) loadPaperAutoStatus();
+  if (intradayVisible) loadIntraday();
+}, 60000);
+
+</script>
+</body>
+</html>
