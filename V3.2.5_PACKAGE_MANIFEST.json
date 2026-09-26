@@ -1,0 +1,23 @@
+{
+  "version": "3.2.5",
+  "base": "marketpredictor-v3.2.4-low-memory-export.zip",
+  "base_sha256": "c6c032e2c45c79e9845fd73c58a1fdeb8107d2c7cae6651f565124874c771594",
+  "scope": "historical data export memory and download reliability",
+  "tests_passed": 23,
+  "production_deployed": false,
+  "changed_files": {
+    "historical_export.py": "f93b8cc570bfc696ecd80ee7032180837c49d9a2c50e2d8ed40ba003c3d0c1d4",
+    "historical_fallbacks.py": "0da8651f564cd1518be9f8414c862fa5c5e2b78405e2c8afb1d495905e84994c",
+    "historical_extras.py": "9944db896370380f76820d9e87d8682f9358267c81081e0ace6f8b2184080271",
+    "indstocks_client.py": "12119446b1babadf57a9062dc93953c18808c73fc81808f62853e72cef645923",
+    "export_streaming.py": "648e4ffa8d683b1739616376cc5aba7a7694544023dd89ca280e2787d479a229",
+    "gunicorn.conf.py": "3ad6ec34d2b086672d737b04ba27e4f1e565d6033fbe1b4c63b29fbcda49dbd0",
+    "requirements.txt": "6332244e01b23e671020c7e338402921a2f204145ff5ef8a55d3288ccbf660dc",
+    "render.yaml": "c8648e0fd309e256566c6518e9c42e2a0f1680239a13d8b91a397490b131aa24",
+    "README.md": "bc75398578f272c4b4580fd618d3fc791570e16862fd10711ba7267da376b306",
+    "tests/test_export_memory.py": "b8e85368f27817cec7cac1f51eeeffce42795be0dc6bd98c37dc6b828711b443",
+    "tests/stress_export_memory.py": "63c0718a3000c907121e3979c68ac7993fb4435890c25825ed7adb320dde354f",
+    "V3.2.5_DEPLOYMENT.md": "47db31d2a936d51036d74b63d75bb0a122bab52f36527b6637d27b6026b613fd",
+    "V3.2.5_STRESS_RESULTS.json": "f6c3bab86a3934efb38f7e8d3cf392c50c754706ca43cc84ca0154125f02046d"
+  }
+}

@@ -1,0 +1,301 @@
+{
+  "engine_version": "v2.0.0-six-phase",
+  "capital": 200000.0,
+  "data_interval": "5m",
+  "execution_mode": "5m compatibility (real 1m unavailable)",
+  "days_total": 61,
+  "train_days": 36,
+  "validation_days": 12,
+  "test_days": 13,
+  "train_events": 127341,
+  "validation_raw_events": 38895,
+  "validation_proven_events": 0,
+  "test_raw_events": 49573,
+  "test_selected_trades": 0,
+  "train_proven_buckets": [],
+  "validation_summary": {
+    "trades": 0,
+    "net_pnl": 0,
+    "expectancy_pct": 0,
+    "win_rate_pct": 0,
+    "profit_factor": 0,
+    "max_drawdown_inr": 0,
+    "top3_removed_net_pnl": 0
+  },
+  "test_summary": {
+    "trades": 0,
+    "net_pnl": 0,
+    "expectancy_pct": 0,
+    "win_rate_pct": 0,
+    "profit_factor": 0,
+    "max_drawdown_inr": 0,
+    "top3_removed_net_pnl": 0
+  },
+  "positive_edge_proven_on_untouched_test": false,
+  "limitations": [
+    "5m bundle only; no real 1m execution path in this run",
+    "NIFTY/VIX historical index series absent; market state is stock-derived breadth/dispersion",
+    "sector indices absent; sector proxy comes from current snapshot industry/app-sector fields, not PIT sector membership",
+    "current universe snapshot applied backward, not PIT",
+    "no bid/ask/tick/order book/pre-open"
+  ],
+  "train_raw_by_family": {
+    "opening_range_expansion": {
+      "trades": 14983,
+      "net_pnl": -1836678.1279089537,
+      "expectancy_pct": -0.2509947539234407,
+      "win_rate_pct": 25.41547086698258,
+      "profit_factor": 0.23814310495810034,
+      "max_drawdown_inr": 1837191.5278255078,
+      "top3_removed_net_pnl": -1838286.412705133
+    },
+    "market_sector_stock_alignment": {
+      "trades": 17778,
+      "net_pnl": -1965823.882021667,
+      "expectancy_pct": -0.22660741342634427,
+      "win_rate_pct": 30.20024749690629,
+      "profit_factor": 0.30836607195371296,
+      "max_drawdown_inr": 1966000.309019054,
+      "top3_removed_net_pnl": -1967617.1849710708
+    },
+    "cross_sectional_momentum": {
+      "trades": 13995,
+      "net_pnl": -1561713.1480634916,
+      "expectancy_pct": -0.22993285427529014,
+      "win_rate_pct": 29.503394069310467,
+      "profit_factor": 0.30269099853894116,
+      "max_drawdown_inr": 1561888.620863231,
+      "top3_removed_net_pnl": -1563474.098359464
+    },
+    "compression_expansion": {
+      "trades": 21671,
+      "net_pnl": -2369171.410745109,
+      "expectancy_pct": -0.22493406947155514,
+      "win_rate_pct": 28.078999584698444,
+      "profit_factor": 0.27741171886918325,
+      "max_drawdown_inr": 2369171.410745119,
+      "top3_removed_net_pnl": -2370856.189080129
+    },
+    "conditional_mean_reversion": {
+      "trades": 4472,
+      "net_pnl": -506576.76874173724,
+      "expectancy_pct": -0.23396297216692075,
+      "win_rate_pct": 30.21019677996422,
+      "profit_factor": 0.3276036067530755,
+      "max_drawdown_inr": 506578.8546679074,
+      "top3_removed_net_pnl": -508189.2933002629
+    },
+    "failed_breakout": {
+      "trades": 43307,
+      "net_pnl": -4457602.40178599,
+      "expectancy_pct": -0.21034800082184896,
+      "win_rate_pct": 28.076292516221397,
+      "profit_factor": 0.2722249713018474,
+      "max_drawdown_inr": 4457778.506598262,
+      "top3_removed_net_pnl": -4459213.892774175
+    },
+    "gap_continuation": {
+      "trades": 11135,
+      "net_pnl": -1215911.4975826591,
+      "expectancy_pct": -0.22380677283242453,
+      "win_rate_pct": 28.854961832061072,
+      "profit_factor": 0.2894521773842305,
+      "max_drawdown_inr": 1216453.1870612071,
+      "top3_removed_net_pnl": -1217597.594137185
+    }
+  },
+  "validation_raw_by_family": {
+    "opening_range_expansion": {
+      "trades": 5130,
+      "net_pnl": -560997.6425017166,
+      "expectancy_pct": -0.22607553490467602,
+      "win_rate_pct": 25.789473684210527,
+      "profit_factor": 0.22114954143990848,
+      "max_drawdown_inr": 560997.6425017151,
+      "top3_removed_net_pnl": -562691.8429561058
+    },
+    "compression_expansion": {
+      "trades": 7249,
+      "net_pnl": -750799.9541511226,
+      "expectancy_pct": -0.21281224374981822,
+      "win_rate_pct": 27.672782452752102,
+      "profit_factor": 0.26379451260150394,
+      "max_drawdown_inr": 750799.9541511236,
+      "top3_removed_net_pnl": -752380.3182574268
+    },
+    "market_sector_stock_alignment": {
+      "trades": 3668,
+      "net_pnl": -375005.98864201177,
+      "expectancy_pct": -0.2089268032206746,
+      "win_rate_pct": 29.4711014176663,
+      "profit_factor": 0.269321698931294,
+      "max_drawdown_inr": 375005.9886420106,
+      "top3_removed_net_pnl": -376406.8858069659
+    },
+    "cross_sectional_momentum": {
+      "trades": 5370,
+      "net_pnl": -571608.54643234,
+      "expectancy_pct": -0.21894170746708558,
+      "win_rate_pct": 28.026070763500933,
+      "profit_factor": 0.25598285544436356,
+      "max_drawdown_inr": 571974.3440140892,
+      "top3_removed_net_pnl": -573197.8254869386
+    },
+    "failed_breakout": {
+      "trades": 13888,
+      "net_pnl": -1491014.0384922596,
+      "expectancy_pct": -0.21949708300558693,
+      "win_rate_pct": 25.244815668202765,
+      "profit_factor": 0.22268075382481387,
+      "max_drawdown_inr": 1491298.1957217623,
+      "top3_removed_net_pnl": -1492613.3690173032
+    },
+    "gap_continuation": {
+      "trades": 2934,
+      "net_pnl": -368001.7163888729,
+      "expectancy_pct": -0.25511770253723715,
+      "win_rate_pct": 24.335378323108383,
+      "profit_factor": 0.20860720964434962,
+      "max_drawdown_inr": 368001.7163888736,
+      "top3_removed_net_pnl": -369605.9665332108
+    },
+    "conditional_mean_reversion": {
+      "trades": 656,
+      "net_pnl": -80337.3129887501,
+      "expectancy_pct": -0.2514850683012571,
+      "win_rate_pct": 28.20121951219512,
+      "profit_factor": 0.2773938737058567,
+      "max_drawdown_inr": 81340.17674087087,
+      "top3_removed_net_pnl": -81916.965326149
+    }
+  },
+  "test_raw_by_family": {
+    "opening_range_expansion": {
+      "trades": 6806,
+      "net_pnl": -710729.7545826035,
+      "expectancy_pct": -0.21487569487475647,
+      "win_rate_pct": 31.046135762562443,
+      "profit_factor": 0.2986185820910972,
+      "max_drawdown_inr": 710729.7545826039,
+      "top3_removed_net_pnl": -712337.3132024567
+    },
+    "market_sector_stock_alignment": {
+      "trades": 8416,
+      "net_pnl": -766376.5770920115,
+      "expectancy_pct": -0.18616112030571574,
+      "win_rate_pct": 33.840304182509506,
+      "profit_factor": 0.3675857300942965,
+      "max_drawdown_inr": 766386.6727935867,
+      "top3_removed_net_pnl": -767988.0017416021
+    },
+    "compression_expansion": {
+      "trades": 7858,
+      "net_pnl": -849605.1218971178,
+      "expectancy_pct": -0.22160213660530317,
+      "win_rate_pct": 28.620514125731738,
+      "profit_factor": 0.2656731263248089,
+      "max_drawdown_inr": 850132.2174017257,
+      "top3_removed_net_pnl": -851210.1522447701
+    },
+    "cross_sectional_momentum": {
+      "trades": 5777,
+      "net_pnl": -604756.6610131084,
+      "expectancy_pct": -0.21569879782408585,
+      "win_rate_pct": 30.500259650337547,
+      "profit_factor": 0.30892293501155227,
+      "max_drawdown_inr": 605055.0709204837,
+      "top3_removed_net_pnl": -606366.3258430087
+    },
+    "failed_breakout": {
+      "trades": 15208,
+      "net_pnl": -1546270.5974736696,
+      "expectancy_pct": -0.20767500679592096,
+      "win_rate_pct": 28.86638611257233,
+      "profit_factor": 0.2677175598507942,
+      "max_drawdown_inr": 1546270.5974736765,
+      "top3_removed_net_pnl": -1547878.0819846697
+    },
+    "gap_continuation": {
+      "trades": 4293,
+      "net_pnl": -476848.1517242241,
+      "expectancy_pct": -0.2283995756274657,
+      "win_rate_pct": 27.67295597484277,
+      "profit_factor": 0.2520890295793391,
+      "max_drawdown_inr": 477262.6148654955,
+      "top3_removed_net_pnl": -478454.6367754952
+    },
+    "conditional_mean_reversion": {
+      "trades": 1215,
+      "net_pnl": -147781.7823874419,
+      "expectancy_pct": -0.25167946966881494,
+      "win_rate_pct": 28.14814814814815,
+      "profit_factor": 0.3052149723505798,
+      "max_drawdown_inr": 148965.9914870118,
+      "top3_removed_net_pnl": -149390.67840027896
+    }
+  },
+  "train_raw_by_side": {
+    "LONG": {
+      "trades": 59140,
+      "net_pnl": -6596451.71540541,
+      "expectancy_pct": -0.22822967686091983,
+      "win_rate_pct": 27.817044301657084,
+      "profit_factor": 0.2822168267525654,
+      "max_drawdown_inr": 6597467.813659056,
+      "top3_removed_net_pnl": -6598415.43680687
+    },
+    "SHORT": {
+      "trades": 68201,
+      "net_pnl": -7317025.521444198,
+      "expectancy_pct": -0.22040946786829735,
+      "win_rate_pct": 28.830955557836397,
+      "profit_factor": 0.2805991415362206,
+      "max_drawdown_inr": 7317025.521444066,
+      "top3_removed_net_pnl": -7318652.920033455
+    }
+  },
+  "validation_raw_by_side": {
+    "SHORT": {
+      "trades": 23699,
+      "net_pnl": -2507736.541841685,
+      "expectancy_pct": -0.2171652082426938,
+      "win_rate_pct": 26.836575382927553,
+      "profit_factor": 0.23573350143643768,
+      "max_drawdown_inr": 2507736.5418416825,
+      "top3_removed_net_pnl": -2509343.765792144
+    },
+    "LONG": {
+      "trades": 15196,
+      "net_pnl": -1690028.6577553882,
+      "expectancy_pct": -0.22767640793649466,
+      "win_rate_pct": 26.05948933929982,
+      "profit_factor": 0.2437384755205473,
+      "max_drawdown_inr": 1690028.6577553826,
+      "top3_removed_net_pnl": -1691722.2898949254
+    }
+  },
+  "test_raw_by_side": {
+    "SHORT": {
+      "trades": 26230,
+      "net_pnl": -2541750.080309024,
+      "expectancy_pct": -0.19875571522934815,
+      "win_rate_pct": 31.5059092642013,
+      "profit_factor": 0.3073712377321051,
+      "max_drawdown_inr": 2541750.080309004,
+      "top3_removed_net_pnl": -2543362.4775662613
+    },
+    "LONG": {
+      "trades": 23343,
+      "net_pnl": -2560618.5658611525,
+      "expectancy_pct": -0.2248162849242855,
+      "win_rate_pct": 28.39395107741079,
+      "profit_factor": 0.2785709492479584,
+      "max_drawdown_inr": 2561280.806127335,
+      "top3_removed_net_pnl": -2562226.934869379
+    }
+  },
+  "by_family": {},
+  "by_regime": {},
+  "by_side": {},
+  "by_day": {}
+}

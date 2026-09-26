@@ -1,0 +1,141 @@
+{
+  "exporter_version": "v3.2.2-multisource-data-export",
+  "audit_type": "static + contract wiring audit",
+  "simulation_executed": false,
+  "checks": 26,
+  "passed": 26,
+  "failed": 0,
+  "ready_for_authenticated_export_test": true,
+  "results": [
+    {
+      "check": "python_compile_all",
+      "status": "PASS",
+      "detail": "all root Python files compile"
+    },
+    {
+      "check": "indstocks_documented_code_shape_only",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "nifty_financial_alias_fixed",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_v3_historical",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_india_vix_documented_key",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_equity_isin_fallback",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "dhan_public_master",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "dhan_index_contract",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "dhan_no_manual_id_map",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_corporate_actions_fallback",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_fii_dii_fallback",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_gift_nifty",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "upstox_global_fallback",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "recent_news_marked_partial",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "current_profiles_not_pit",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "financials_not_causal_without_timestamp",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "credential_missing_status",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "provider_attempt_log",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "provider_capabilities_log",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "date_completeness",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "negative_volume_hygiene",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "duplicate_1530_fix",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "manifest_exporter_version",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "estimate_exposes_provider_status",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "readme_documents_fallback_chain",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "no_historical_microstructure_fabrication",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "package": "marketpredictor-main-v2-six-phase",
+  "engine_version": "v2.0.0-six-phase",
+  "built_utc": "2026-09-23T00:00:00Z",
+  "v2_edge_gate_default": "enabled",
+  "frozen_edge_model_proven_groups": 0,
+  "simulation_report": "research/v2_simulation_report.json",
+  "files": [
+    {
+      "path": ".python-version",
+      "sha256": "61141e9590171b900fdf709e7ea8f050d5c2a69198d4a4a1977d7c45186307e5",
+      "bytes": 7
+    },
+    {
+      "path": "README.md",
+      "sha256": "4f98fe179b90ba4226a6566503cceeb50b531d512433d5512fe6c8171c64c684",
+      "bytes": 65022
+    },
+    {
+      "path": "app.py",
+      "sha256": "8c89333278be880bbb7fb3aebf0fdd95bb6b9822eb3e5ca85d4b0e933957c3d3",
+      "bytes": 1171245
+    },
+    {
+      "path": "data/large_mid_cap_universe.txt",
+      "sha256": "790d1e1cda6a4a035bb91b6a01d57ab48222a9be1e0f2fabcd5a22e6d161c38b",
+      "bytes": 1590
+    },
+    {
+      "path": "data/master_data_sources.json",
+      "sha256": "01eff5a1eb847deea02a7d57700c403873a7452fa1d5445deda10d8cdf3230d8",
+      "bytes": 1422
+    },
+    {
+      "path": "data/v2_edge_model.json",
+      "sha256": "a2d37d56efecef34f42f54757242571e5dcdb9c90425ca8bca3a34c1222c0a8d",
+      "bytes": 30204
+    },
+    {
+      "path": "historical_export.py",
+      "sha256": "a94ef000e862ff369bfb7928875d07be3612e4cc936c8a08cf2ee8508e8e30bf",
+      "bytes": 75003
+    },
+    {
+      "path": "historical_extras.py",
+      "sha256": "727459972e1accb2c8a61e37ff1464b229e9cca9a7b6485c65ed256d39aa4096",
+      "bytes": 29225
+    },
+    {
+      "path": "indstocks_client.py",
+      "sha256": "ac84ecbc7e3e5d0bab47c838dddac0c4a62b0032e5dfeedced5de5750b42d8b0",
+      "bytes": 26497
+    },
+    {
+      "path": "market_data.py",
+      "sha256": "08e2aecda3e21b0806309b421502d4c3622f56b4bd560ba9138d4276b742c3cf",
+      "bytes": 9509
+    },
+    {
+      "path": "numba_research.py",
+      "sha256": "5a3c6d353b642fbe845e68b6327df25c8c1c890af054e7d3f3c830fad8fd7c35",
+      "bytes": 16980
+    },
+    {
+      "path": "render.yaml",
+      "sha256": "9726d7a91cf988682940d1974b5d42bd208682bc2982a059f8a8a25af71dcb0c",
+      "bytes": 7631
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "7aa77b0a04e2723f18338daa5803333d887702dbde4eb9a14700b719eeaeded3",
+      "bytes": 130
+    },
+    {
+      "path": "research/v2_integration_audit.json",
+      "sha256": "f731e53468fb5125ed798be71b87377c19fadb3442091d94b9de899d77e1e5d2",
+      "bytes": 1491
+    },
+    {
+      "path": "research/v2_simulation_report.json",
+      "sha256": "c3a0bda361c080aabca831ada096d58d3ac92007c41564a0ee1f154a6db38558",
+      "bytes": 10152
+    },
+    {
+      "path": "research/v2_simulation_trades.csv",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "bytes": 1
+    },
+    {
+      "path": "research_simulator.py",
+      "sha256": "8dd41c61b17ac58237bbbb9e32d5212911bfed25e34326f76273318c0dfd4562",
+      "bytes": 23116
+    },
+    {
+      "path": "sector_data.py",
+      "sha256": "9e1cffd35eb1230bff75d025bb23024940ed7010b308c28950eb0beef1e7ea6d",
+      "bytes": 6796
+    },
+    {
+      "path": "strategies.py",
+      "sha256": "d641aee8ec4aa730f7293659975796c9dca9071cebe94a7fa9aa6108ee6d35df",
+      "bytes": 70764
+    },
+    {
+      "path": "tax_calculator.py",
+      "sha256": "005174f5dd718a3e244341988624cb4dde511024cf983b3654359b27a872c231",
+      "bytes": 11627
+    },
+    {
+      "path": "templates/index.html",
+      "sha256": "68cc4b523c147f796b92d218848f37b3ced47d1b176834bd3b00f202d3ebdebd",
+      "bytes": 294919
+    },
+    {
+      "path": "v2_engine.py",
+      "sha256": "185fcaf599b542fd9ad95984976cbc4cfd210947b85239ae1b7d14745bbf12df",
+      "bytes": 26145
+    }
+  ]
+}

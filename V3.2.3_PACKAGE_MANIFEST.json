@@ -1,0 +1,17 @@
+{
+  "package": "marketpredictor-v3.2.3-persistent-compact-export",
+  "base_engine": "v3.2.1-opportunity-barrier-parity",
+  "data_exporter": "v3.2.3-persistent-compact-multisource",
+  "changes": [
+    "PostgreSQL-persisted historical export job metadata",
+    "PostgreSQL chunk persistence for newest completed ZIP",
+    "automatic ZIP restore after Render redeploy/restart",
+    "compact epoch+OHLCV candle format (optional, default on)",
+    "live requested-dataset plan in export UI",
+    "storage/persistence status in export UI",
+    "interrupted-job state instead of 404 after restart",
+    "fixed missing weekly goal guard function",
+    "fixed Position Guard worker start/stop/status functions"
+  ],
+  "simulation_run": false
+}

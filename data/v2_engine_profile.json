@@ -1,0 +1,38 @@
+{
+  "engine_version": "v2.3.0-edge-first-economic-gate",
+  "signal_interval": "5m_completed",
+  "execution_interval": "1m_when_real_1m_exists",
+  "fallback_execution_interval": "5m_compatibility_when_1m_absent",
+  "synthetic_1m": false,
+  "label_alignment": "next_executable_bar_open_to_forward_close",
+  "research_modes": [
+    "alpha_discovery",
+    "portfolio_simulation",
+    "walkforward"
+  ],
+  "production_authorized": false,
+  "require_proven_edge": true,
+  "require_economic_edge": true,
+  "min_net_edge_before_slippage_pct": 0.03,
+  "slippage_stress_bps": 5,
+  "min_edge_to_mandatory_cost_multiple": 1.5,
+  "starting_capital_inr": 200000,
+  "portfolio_notional_inr": 65000,
+  "max_concurrent_positions": 3,
+  "max_trades_per_day": 4,
+  "risk_per_trade_pct": 1.0,
+  "daily_loss_limit_pct": 2.0,
+  "stop_model": "1.0x ATR compatibility test; bounded",
+  "target_model": "1.5R compatibility test",
+  "max_hold_bars": "6 for compatibility portfolio test",
+  "slippage_accounting": "separate from mandatory fees; never double charged",
+  "walkforward": "6 expanding folds with one-day purge gaps",
+  "data_limitations": [
+    "current verified archive is 5m",
+    "no verified historical 1m bytes in workspace",
+    "no verified PIT universe history",
+    "no verified PIT sector history",
+    "no intraday NIFTY/VIX/sector files in archive",
+    "no historical bid-ask/order-book/ticks/preopen"
+  ]
+}

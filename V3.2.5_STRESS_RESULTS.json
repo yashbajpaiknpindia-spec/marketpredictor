@@ -1,0 +1,26 @@
+{
+  "test_type": "offline synthetic; real Flask application and exporter; mocked market APIs",
+  "address_space_limit_mb": 512,
+  "baseline_rss_mb": 114.796875,
+  "catalogue": {
+    "discarded_derivative_records": 500000,
+    "uncompressed_mb": 285.14862060546875,
+    "retained_index_records": 1,
+    "rss_after_mb": 115.53515625
+  },
+  "export": {
+    "stocks": 250,
+    "sessions": 66,
+    "candles_verified": 6187500,
+    "stock_day_files": 16500,
+    "zip_mb": 103.98882579803467,
+    "zip_crc": "PASS",
+    "duplicate_paths": 0,
+    "http_download_bytes": 109040187,
+    "http_range_resume": "PASS",
+    "rss_after_mb": 131.63671875
+  },
+  "peak_rss_mb": 131.42578125,
+  "elapsed_seconds": 29.65,
+  "status": "PASS"
+}

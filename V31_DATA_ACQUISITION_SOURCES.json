@@ -1,0 +1,42 @@
+{
+  "verified_external_sources": [
+    {
+      "name": "DhanHQ V2 Historical Data",
+      "url": "https://dhanhq.co/docs/v2/historical-data/",
+      "type": "authenticated_api",
+      "1m": true,
+      "history": "up to 5 years",
+      "minute_request_window": "90 days",
+      "exact_2026_overlap_possible": true,
+      "credential_required": true
+    },
+    {
+      "name": "Upstox Historical Candle V3",
+      "url": "https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/",
+      "type": "authenticated_api",
+      "1m": true,
+      "history": "from Jan 2022",
+      "minute_request_window": "1 month for 1-15m",
+      "exact_2026_overlap_possible": true,
+      "credential_required": true
+    },
+    {
+      "name": "rahulkrraj/indian-stock-market-minute-data",
+      "url": "https://huggingface.co/datasets/rahulkrraj/indian-stock-market-minute-data",
+      "type": "public_dataset",
+      "1m": true,
+      "history": "2022-2026",
+      "exact_2026_overlap_possible": false,
+      "notes": "Current surfaced dataset preview ends at 2026-01-21 in the visible metadata."
+    },
+    {
+      "name": "voletiramu/nse-fno-1min-data",
+      "url": "https://github.com/voletiramu/nse-fno-1min-data",
+      "type": "public_dataset",
+      "1m": true,
+      "history": "2024-04-01 through 2026-04-30",
+      "exact_2026_overlap_possible": false,
+      "symbols": 214
+    }
+  ]
+}

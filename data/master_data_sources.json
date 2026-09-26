@@ -1,0 +1,23 @@
+{
+  "data_policy": "Use official exchange/index sources when available; never synthesize missing historical observations as real data.",
+  "sources": {
+    "nse_historical_index_data": "https://www.nseindia.com/reports-indices-historical-index-data",
+    "nse_historical_india_vix": "https://www.nseindia.com/reports-indices-historical-vix",
+    "nse_historical_reports": "https://www.nseindia.com/resources/historical-reports-capital-market-daily-monthly-archives",
+    "nse_large_midcap_250": "https://www.nseindia.com/static/products-services/indices-niftylargemidcap250-index",
+    "nse_corporate_actions": "https://www.nseindia.com/companies-listing/corporate-filings-actions",
+    "nse_data_reports_download": "https://www.nseindia.com/static/products-services/equity-market-data-reports-download"
+  },
+  "availability_in_current_run": {
+    "historical_stock_5m": "available_from_supplied_library_bundle",
+    "historical_nifty_intraday": "not_available_in_supplied_bundle",
+    "historical_india_vix_intraday": "not_available_in_supplied_bundle",
+    "historical_sector_intraday": "not_available_in_supplied_bundle",
+    "point_in_time_universe": "not_available",
+    "point_in_time_sector_membership": "not_available",
+    "historical_1m_stock": "not_available_in_current_bundle",
+    "historical_bid_ask": "not_available",
+    "historical_ticks": "not_available",
+    "historical_preopen": "not_available"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "folds": [
+    {
+      "fold": 1,
+      "train_start": "2026-06-25",
+      "train_end": "2026-07-29",
+      "valid_start": "2026-07-31",
+      "valid_end": "2026-08-07",
+      "test_start": "2026-08-10",
+      "test_end": "2026-08-17",
+      "val_best_threshold": 0.08,
+      "val_score": -0.06413327493088432,
+      "val_n": 3777,
+      "test_n": 2131,
+      "test_net_mean": -0.1095187643075836,
+      "test_win": 0.34631628343500703
+    },
+    {
+      "fold": 2,
+      "train_start": "2026-06-25",
+      "train_end": "2026-08-06",
+      "valid_start": "2026-08-10",
+      "valid_end": "2026-08-17",
+      "test_start": "2026-08-18",
+      "test_end": "2026-08-25",
+      "val_best_threshold": 0.1,
+      "val_score": -0.07841362694877144,
+      "val_n": 423,
+      "test_n": 183,
+      "test_net_mean": -0.11350781643454028,
+      "test_win": 0.3879781420765027
+    },
+    {
+      "fold": 3,
+      "train_start": "2026-06-25",
+      "train_end": "2026-08-14",
+      "valid_start": "2026-08-18",
+      "valid_end": "2026-08-25",
+      "test_start": "2026-08-26",
+      "test_end": "2026-09-02",
+      "val_best_threshold": 0.1,
+      "val_score": 0.13466354359837326,
+      "val_n": 58,
+      "test_n": 472,
+      "test_net_mean": -0.020897147400042178,
+      "test_win": 0.4639830508474576
+    },
+    {
+      "fold": 4,
+      "train_start": "2026-06-25",
+      "train_end": "2026-08-24",
+      "valid_start": "2026-08-26",
+      "valid_end": "2026-09-02",
+      "test_start": "2026-09-03",
+      "test_end": "2026-09-10",
+      "val_best_threshold": 0.08,
+      "val_score": -5.646163996651287e-05,
+      "val_n": 1099,
+      "test_n": 606,
+      "test_net_mean": -0.09498154592960213,
+      "test_win": 0.41914191419141916
+    },
+    {
+      "fold": 5,
+      "train_start": "2026-06-25",
+      "train_end": "2026-09-01",
+      "valid_start": "2026-09-03",
+      "valid_end": "2026-09-10",
+      "test_start": "2026-09-11",
+      "test_end": "2026-09-18",
+      "val_best_threshold": 0.04,
+      "val_score": -0.07445314126129406,
+      "val_n": 10670,
+      "test_n": 13973,
+      "test_net_mean": -0.10892097362321328,
+      "test_win": 0.37164531596650685
+    }
+  ]
+}
