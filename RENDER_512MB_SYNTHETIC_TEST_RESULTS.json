@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "address_space_limit_mb": 512,
+  "stocks": 250,
+  "trading_sessions": 20,
+  "archive_member_stock_days": 5000,
+  "archive_mb": 31.53,
+  "archive_crc": "PASS",
+  "local_zip_removed_after_build": true,
+  "durable_archive_used_after_restart": true,
+  "hydrated_ticker_days": 100,
+  "peak_rss_mb": 223.5,
+  "elapsed_seconds": 8.62
+}

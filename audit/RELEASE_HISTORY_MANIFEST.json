@@ -1,0 +1,53 @@
+{
+  "package_version": "3.4.16",
+  "documentation_mode": "complete version reports retained + consolidated index + raw Replay #23 forensic artifact + v3.4.16 download-safety finding",
+  "existing_version_reports": [],
+  "master_documents": {
+    "audit/RELEASE_HISTORY_AND_REPLAY_FINDINGS.md": "ee383f080e53e8e1cc63757d6fcb35b5e14b25addfe948dcbfb390704d4044a3",
+    "audit/REPLAY_FINDINGS_REGISTER.md": "5b74bfac32966857be83e9052be081da3e5ab9e52a9831aa87249fb94652009d",
+    "audit/RELEASE_DOCUMENTATION_INDEX.md": "e2e3a3e4a5cbd03e2c0523805024ec3af77e6b434bfd54bc516a1e9e8aaac73a",
+    "audit/replay_run_23_20260927_210409_forensics.zip": "d0977782117bec5fa0bc12b80255a298410bac7050988a1d71cea70c7ba3400b"
+  },
+  "replay_source_artifact": {
+    "run_id": 23,
+    "file": "audit/replay_run_23_20260927_210409_forensics.zip"
+  },
+  "latest_release": {
+    "version": "3.4.16",
+    "report": "V3.4.16_REPLAY_DOWNLOAD_OOM_FIX.md",
+    "primary_change": "disk-backed, bounded-memory replay forensic download for large/new runs",
+    "replay_finding": "Replay #24 new-run downloads could terminate the single Render web worker because the candle cache was fully materialized and copied multiple times in memory."
+  },
+  "documents": {
+    "audit/RELEASE_HISTORY_AND_REPLAY_FINDINGS.md": {
+      "sha256": "d3e9547e9b5c1dbb6d487d915f69115dda44dab31f787910e8714481eaca5501",
+      "bytes": 18654
+    },
+    "audit/REPLAY_FINDINGS_REGISTER.md": {
+      "sha256": "2023820f1573a9d30b5d01e2f10a76418d5fee07d80190383ee88a4c12a00c42",
+      "bytes": 3782
+    },
+    "audit/RELEASE_DOCUMENTATION_INDEX.md": {
+      "sha256": "2f2f7754f7f606b4571fdc3f5acce0539aea7a0931a7d5b0fa2a11fc6f9e42b6",
+      "bytes": 1393
+    },
+    "V3.4.16_REPLAY_DOWNLOAD_OOM_FIX.md": {
+      "sha256": "77d2ea6791782a3719a7ffe7be8a8d59d93e761f0ccb9e7cc667952b4a5471fa",
+      "bytes": 3709
+    }
+  },
+  "source_integrity": {
+    "app.py": {
+      "sha256": "a66cc6cfc1f9ee4edd13b80aaf9eb05335d839931f440fa6281efca010cfa807",
+      "bytes": 1322736
+    },
+    "strategies.py": {
+      "sha256": "e444961282d651bb6a3981647a2ad2e71ce37026735c75c95713580b8c05b7e5",
+      "bytes": 82565
+    },
+    "templates/index.html": {
+      "sha256": "29a1669dd0422693c9b5e801784b35eafa0da9a63101c28544dd618bedf5bfd3",
+      "bytes": 329495
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "engine_version": "v2.0.0-six-phase",
+  "integration": {
+    "live": "shared candidate builder -> V2 gate",
+    "paper": "shared candidate builder -> V2 gate",
+    "replay": "shared candidate builder -> V2 gate"
+  },
+  "simulated_capital": 200000.0,
+  "historical_run": {
+    "days_total": 61,
+    "train_days": 36,
+    "validation_days": 12,
+    "test_days": 13,
+    "train_events": 127341,
+    "validation_raw_events": 38895,
+    "test_raw_events": 49573,
+    "train_proven_buckets": 0,
+    "selected_test_trades": 0,
+    "positive_edge_proven_on_untouched_test": false
+  },
+  "conclusion": "NO POSITIVE EDGE PROVEN. V2 hard gate is therefore no-trade until a frozen model clears the out-of-sample hurdle.",
+  "data_limitations": [
+    "5m bundle only; no real 1m execution path in this run",
+    "NIFTY/VIX historical index series absent; market state is stock-derived breadth/dispersion",
+    "sector indices absent; sector proxy comes from current snapshot industry/app-sector fields, not PIT sector membership",
+    "current universe snapshot applied backward, not PIT",
+    "no bid/ask/tick/order book/pre-open"
+  ],
+  "research_controls": {
+    "lookahead": "signal uses history through decision bar; entry is next available bar",
+    "same_bar_conflict": "conservatively resolved as stop first",
+    "costs": "brokerage/STT/exchange/SEBI/stamp/GST plus separate configured slippage",
+    "portfolio": "caps overlapping exposure and daily trade count in research selection"
+  }
+}

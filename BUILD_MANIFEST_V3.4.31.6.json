@@ -1,0 +1,10 @@
+{
+  "version": "3.4.31.6",
+  "purpose": "Extended Replay historical-date boundary fix and move database diagnostics to collapsed Export Data section",
+  "files": {
+    "app.py": "a722e16360b1be54da2740a040d831b2fb747edd0c57d73461b2a4919b570db1",
+    "templates/index.html": "3862c638d0ea740c0f1540c026f4f7d5b73b63b3ba4047541a4452c972a89fb5",
+    "V3.4.31.6_RELEASE.md": "5114a54ada0dce1870be3acbbd5fd9e13c0c19097dc51bc284473828818b8918",
+    "tests/test_v3_4_31_6_replay_ui_static.py": "9921eaa3703161f61d429b520e4f36c66d1c797f345a64a489076f76e29557a2"
+  }
+}

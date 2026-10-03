@@ -1,0 +1,24 @@
+# OPTIONAL Large+Mid-cap ticker allowlist OVERRIDE for the Intraday Replay Lab.
+#
+# You do NOT need to fill this in for the cap filter to work. As of the
+# Priority-2 fix, the app now resolves the Large+Mid-cap (NIFTY LargeMidcap
+# 250 = NIFTY 100 + NIFTY Midcap 150) allowlist automatically:
+#   1. If this file has at least one real ticker in it, that list is used
+#      as-is (manual override -- useful if you want your own curated list,
+#      or the auto-download below is ever unreachable from your network).
+#   2. Otherwise the app downloads NSE Indices' own published constituent
+#      CSV at request time and caches it in the database
+#      (market_universe_cache table), refreshed automatically every
+#      INTRADAY_REPLAY_CAP_ALLOWLIST_CACHE_MAX_AGE_DAYS (default 7) days:
+#        https://www.niftyindices.com/IndexConstituent/ind_niftylargemidcap250list.csv
+#      See fetch_and_cache_large_mid_cap_allowlist() in app.py.
+#   3. If neither is available (file empty AND download fails AND no cache
+#      yet), the replay run's message/settings snapshot will say the cap
+#      filter is "unavailable" rather than silently pretending the full
+#      configured universe is already Large+Mid cap. Pass
+#      require_cap_filter=true when starting a run to make the run refuse
+#      to start at all in that case, instead of silently running unfiltered.
+#
+# Format if you do populate this file: one ticker symbol per line (matching
+# the symbols in DEFAULT_UNIVERSES['IN'] in app.py, e.g. RELIANCE, HDFCBANK,
+# INFY -- no exchange suffix). Lines starting with # are ignored.

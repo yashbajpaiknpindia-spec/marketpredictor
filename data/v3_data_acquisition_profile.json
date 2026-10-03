@@ -1,0 +1,22 @@
+{
+  "engine_version": "v3.1.0-data-first-alpha-first",
+  "canonical_timeframe": {
+    "structure": "5m_completed",
+    "execution": "1m_genuine_only",
+    "synthetic_1m": false
+  },
+  "preferred_exact_2026_route": "DhanHQ V2 authenticated intraday historical API",
+  "secondary_exact_2026_route": "Upstox V3 authenticated historical candle API",
+  "public_research_routes": [
+    "rahulkrraj/indian-stock-market-minute-data",
+    "voletiramu/nse-fno-1min-data",
+    "ganeshbiyer/Nse_Historical_Data"
+  ],
+  "required_context": [
+    "NIFTY/index 1m/5m",
+    "India VIX",
+    "sector indices",
+    "point-in-time universe/sector membership"
+  ],
+  "policy": "Do not mark 1m execution as validated unless genuine 1m bytes are loaded and audited."
+}

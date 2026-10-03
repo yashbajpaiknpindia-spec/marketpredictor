@@ -1,0 +1,36 @@
+{
+  "release": "3.4.30.1",
+  "name": "MarketPredictor",
+  "title": "DB Bootstrap Observability",
+  "files": {
+    "app.py": {
+      "sha256": "8df062e5f963ebdaa953faf80c580ab86574739308481d8eb5a50a1834af076b",
+      "bytes": 1538935
+    },
+    "templates/index.html": {
+      "sha256": "f864d14d86b8c62adfb0fd2c90a97011a9b41da4ee8324dce6af54e44bd6f53c",
+      "bytes": 410776
+    },
+    "render.yaml": {
+      "sha256": "479486610e8bdc4d64bc2c9091e3a0e6a80a7286077bde9e1eb69229c395212a",
+      "bytes": 8793
+    },
+    "README.md": {
+      "sha256": "5297dfd42bcea2076c1c326fed77b5f2c9f8b5f775f5a44a3f23c77cff5aee05",
+      "bytes": 73786
+    },
+    "V3.4.30.1_DB_BOOTSTRAP_OBSERVABILITY.md": {
+      "sha256": "558dd5c14d56044cf07de07950ccc3047b9007f86f86df9e09be0b092a4c5fa9",
+      "bytes": 1684
+    },
+    "tests/test_v3_4_30_1_db_bootstrap_observability_static.py": {
+      "sha256": "c51e216054b65cc8d558b6f2e97fc5cce11dfa2fc6c7f03229e32482aaf7d58d",
+      "bytes": 1548
+    }
+  },
+  "tests": {
+    "runnable_pytest": 78,
+    "portfolio_replay": 8,
+    "export_memory": "not runnable in build container: missing ijson"
+  }
+}

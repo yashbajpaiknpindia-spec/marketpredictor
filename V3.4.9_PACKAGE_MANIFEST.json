@@ -1,0 +1,19 @@
+{
+  "version": "v3.4.9",
+  "base": "MarketPredictor v3.4.5 scrip-tournament-fixed",
+  "features": [
+    "focused intraday replay results view",
+    "capital-return instead of sum-of-trade-percent UI metric",
+    "day-by-day starting/ending capital and P&L",
+    "human-readable replay date ranges",
+    "normal replay reuse of completed Export Data before provider fetch",
+    "1m Export Data reuse with local resampling to 5m Replay",
+    "extended replay daily breakdown aggregation",
+    "20 strategies unchanged"
+  ],
+  "deployment": {
+    "root_requirements": true,
+    "root_render_yaml": true,
+    "root_python_version": true
+  }
+}

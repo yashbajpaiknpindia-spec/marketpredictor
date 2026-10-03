@@ -1,0 +1,212 @@
+{
+  "engine_version": "v3.2.1-opportunity-barrier-parity",
+  "audit_type": "post-fix implementation audit only",
+  "simulation_executed": false,
+  "checks": 40,
+  "passed": 40,
+  "failed": 0,
+  "simulation_ready": true,
+  "production_authorized": false,
+  "results": [
+    {
+      "check": "python_compile_all",
+      "status": "PASS",
+      "detail": "all root python files compiled"
+    },
+    {
+      "check": "research_has_main_guard",
+      "status": "PASS",
+      "detail": "research does not auto-run on import"
+    },
+    {
+      "check": "no_global_1120_blackout",
+      "status": "PASS",
+      "detail": "candidate warmup is family-specific"
+    },
+    {
+      "check": "return_units_fixed",
+      "status": "PASS",
+      "detail": "fractional return thresholds"
+    },
+    {
+      "check": "ten_families",
+      "status": "PASS",
+      "detail": "10 candidate families present"
+    },
+    {
+      "check": "barrier_objective",
+      "status": "PASS",
+      "detail": "trade objective aligned to barrier/MFE/MAE"
+    },
+    {
+      "check": "no_tiny_family_veto",
+      "status": "PASS",
+      "detail": "family evidence is diagnostic"
+    },
+    {
+      "check": "portfolio_rank_by_net_edge",
+      "status": "PASS",
+      "detail": "rank by predicted net edge per timestamp"
+    },
+    {
+      "check": "portfolio_uses_actual_exit",
+      "status": "PASS",
+      "detail": "concurrency follows simulated exit bar"
+    },
+    {
+      "check": "research_uses_shared_engine",
+      "status": "PASS",
+      "detail": "canonical semantics shared with runtime"
+    },
+    {
+      "check": "simulation_not_run_in_audit",
+      "status": "PASS",
+      "detail": "audit does not launch the research simulation"
+    },
+    {
+      "check": "shared_engine_version",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "short_barrier_logic",
+      "status": "PASS",
+      "detail": "short stop/target ordering exists"
+    },
+    {
+      "check": "conservative_same_bar",
+      "status": "PASS",
+      "detail": "same-bar ambiguity resolved conservatively"
+    },
+    {
+      "check": "economic_hurdle_enforced",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "brokerage_lower_of",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "core_hurdle_is_acceptance_rule",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "both_sides_strategy_evaluation",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "short_does_not_use_long_stats",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "selector_passes_direction_specific_id",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "short_mirror_swaps_extrema",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_v3_2_import",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_v3_2_enabled",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_v3_2_live_block",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_v3_2_shared_signal",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_v2_gate_not_runtime_veto",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_side_column_schema",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_paper_short_position",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_direction_aware_pnl",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_direction_aware_history",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_historical_vwap_pairing",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_no_short_order_gate",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_short_target_claude_fix",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "app_direction_aware_runtime_text",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "ui_direction_aware_candidates",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "ui_no_bullish_intraday_copy",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "ui_history_side",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "ui_history_colspan",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "unit_tests",
+      "status": "PASS",
+      "detail": "canonical barrier/economics and 10x2 side-parity tests pass"
+    },
+    {
+      "check": "no_postfix_simulation_artifacts_refreshed",
+      "status": "PASS",
+      "detail": "Existing historical research artifacts are preserved; no new simulation was executed during this audit."
+    }
+  ]
+}

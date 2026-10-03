@@ -1,0 +1,13 @@
+{
+  "version": "3.4.31.3",
+  "purpose": "DB bootstrap worker lifecycle fix: stale init guard removal",
+  "files": {
+    "app.py": "b21066bbfbdd12cb09966a618ea552c7584c679805679d3639f50accc849bce5",
+    "templates/index.html": "05d5311ca60885df92edba5619778aaf72f6e0ae426d15091dc326e259a2d286",
+    "V3.4.31.3_RELEASE.md": "7210512c862172fcf4705896cfb51207107edc1aa55dcb0d5d2b6e713a1775c6",
+    "README.md": "cc4392a02103bb2793103c058be0325b33126ccb7cf3e607fbac4ca38023439d",
+    "tests/test_v3_4_31_2_bootstrap_supervision.py": "5f672e34aa04b1f3c23bb8b96b98ccc5c71b1fea411a8af3edcf274d0ad9e9f2",
+    "tests/test_v3_4_31_synthetic_db_bootstrap.py": "82ebe6cfa755f96424baed222bf32e767014ec3bcae198758866b70808bbda7c",
+    "tests/test_v3_4_31_3_bootstrap_stale_init_guard.py": "8447ff501a8aa39b99d8175ca87e79070fef803688e3c6c40f14637cc07ddec5"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "engine_version": "v3.0.0-alpha-first-research-core",
+  "application_integration": "integrated_backend_into_existing_application",
+  "production_authorized": false,
+  "require_proven_edge": true,
+  "signal_interval": "5m_completed",
+  "execution_interval": "1m_real_only",
+  "data_contract": "real_1m_execution__completed_5m_structure__no_synthetic_1m",
+  "capital_rupees": 200000,
+  "research_notional_rupees": 65000,
+  "max_concurrent_positions": 3,
+  "max_trades_per_day": 4,
+  "min_net_edge_pct_before_slippage": 0.03,
+  "stress_slippage_bps": 5.0,
+  "slippage_accounting": "separate_from_mandatory_costs",
+  "current_verified_dataset": {
+    "sessions": 61,
+    "symbols": 225,
+    "rows_5m": 1029375,
+    "min_day": "2026-06-24",
+    "max_day": "2026-09-18",
+    "duplicate_day_symbol_timestamp": 0,
+    "invalid_ohlc_rows": 0,
+    "negative_volume_rows": 0,
+    "genuine_1m_historical_available": false
+  },
+  "model_status": "no_proven_positive_edge",
+  "note": "V3 research layer is integrated, but it does not authorize live trading until an untouched out-of-sample net-positive edge is demonstrated."
+}

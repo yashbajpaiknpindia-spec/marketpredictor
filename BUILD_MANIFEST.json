@@ -1,0 +1,13 @@
+{
+  "version": "3.4.31.5",
+  "purpose": "DB pool exhaustion/teardown root-cause fix; eliminate connect/disconnect churn",
+  "files": {
+    "app.py": "90cb6ff1a0fbe54e9d348eab662be10b305b805ff0bb9ea7c3bfe8b793e1b1c5",
+    "db_pool.py": "e62feb96c7763a5d5847c129b0fd225e4cbb93d03703c3f8b18168251743bb0d",
+    "README.md": "f6272330201aa3fd487455a32fa37018d220d03334313b1dba7384408001f95e",
+    "V3.4.31.5_RELEASE.md": "6e191e276cccf6f36c07dd9519689aeecafee440cd9a199ef9212afdc542ba03",
+    "render.yaml": "543142810fb2372afa1dad807261d732a49f9cc664151fcc705a0933db130df8",
+    "tests/test_db_pool_local.py": "11c471c79a7a5365a5fc1a33aec4053054dd3afd6b562012eb2edc8731391e32",
+    "tests/test_db_pool_managed.py": "7cc37f93e3e40e10e6d8a5f655e43d67bae0d66057c1f100889595be2e550f5e"
+  }
+}
