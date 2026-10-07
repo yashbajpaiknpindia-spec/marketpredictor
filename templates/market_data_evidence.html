@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MarketPredictor · Strategy Evidence</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#14161d;--muted:#687183;--border:rgba(20,22,29,.09);--blue:#4f6bff;--bluebg:#ebeeff;--green:#17a673;--greenbg:#e4f7ef;--red:#e5484d;--redbg:#fdecec;--amber:#f0a030;--amberbg:#fdf1dc;--shadow:0 8px 24px rgba(20,22,29,.06)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:1560px;margin:0 auto;padding:20px}.top{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}.top a{padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card);text-decoration:none;color:var(--text);font-weight:700}.title h1{margin:0;font-size:22px}.title p{margin:2px 0 0;color:var(--muted)}.pill{margin-left:auto;border-radius:999px;padding:6px 11px;background:var(--greenbg);color:#0e7a54;font-weight:800}.grid{display:grid;grid-template-columns:1fr;gap:16px}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}.head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}.head strong{font-size:14px}.head span{color:var(--muted);font-size:11px;margin-left:auto}.body{padding:14px 16px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}button{border:1px solid var(--border);background:#fff;color:var(--text);border-radius:9px;padding:9px 12px;font:inherit;font-weight:800;cursor:pointer}button.primary{background:#111827;color:#fff;border-color:#111827}button.green{background:var(--greenbg);color:#0e7a54;border-color:rgba(23,166,115,.28)}button:disabled{opacity:.5;cursor:not-allowed}.note{margin-top:10px;padding:10px 11px;border-radius:10px;background:var(--bluebg);color:#3448c5;font-size:11px}.warn{background:var(--amberbg);color:#8a560d}.bad{background:var(--redbg);color:#b3261e}.good{background:var(--greenbg);color:#0e7a54}.small{font-size:11px;color:var(--muted)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;word-break:break-all}.statgrid{display:grid;grid-template-columns:repeat(8,minmax(100px,1fr));gap:8px}.stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 10px}.stat b{display:block;font-size:18px}.stat span{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}.table{overflow:auto}.table table{width:100%;border-collapse:collapse;min-width:1100px}.table th{padding:9px 10px;text-align:left;background:var(--bg);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.table td{padding:9px 10px;border-top:1px solid var(--border);vertical-align:top}.status{font-weight:800}.status.ready,.status.active{color:var(--green)}.status.blocked_incomplete,.status.blocked_insufficient_evidence,.status.error{color:var(--red)}.status.exploratory{color:var(--amber)}.section{margin-top:16px}.details{white-space:pre-wrap;font-size:11px;color:var(--muted);max-height:300px;overflow:auto}.diag{padding:10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);min-height:42px}.matrix{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.matrix .item{padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}.matrix .item b{display:block}.tag{display:inline-flex;align-items:center;border-radius:999px;padding:3px 7px;font-size:10px;font-weight:800;background:var(--bg);border:1px solid var(--border);margin:1px 3px 1px 0}.tag.good{background:var(--greenbg);border-color:rgba(23,166,115,.2)}.tag.bad{background:var(--redbg);border-color:rgba(229,72,77,.2)}.tag.warn{background:var(--amberbg);border-color:rgba(240,160,48,.2)}@media(max-width:1100px){.statgrid{grid-template-columns:repeat(4,1fr)}.matrix{grid-template-columns:repeat(2,1fr)}}@media(max-width:640px){.wrap{padding:12px}.statgrid{grid-template-columns:repeat(2,1fr)}.matrix{grid-template-columns:1fr}}
+</style>
+</head><body>
+<div class="wrap">
+  <div class="top"><a href="/">← MarketPredictor</a><a href="/storage">💾 Storage</a><div class="title"><h1>Strategy Evidence & Decision Audit</h1><p>Evidence is observational: it explains which strategy worked where, what the selector expected, what actually happened, and why the outcome differed. Strategy definitions are never edited by this page.</p></div><div class="pill">REAL DATA · BLIND VALIDATION · NO STRATEGY MUTATION</div></div>
+
+  <div class="card"><div class="head"><strong>Evidence contract</strong><span>promotion gate</span></div><div class="body">
+    <div class="matrix">
+      <div class="item"><b>100% data coverage</b><span class="small">Every requested ticker-day must pass the 1-minute audit.</span></div>
+      <div class="item"><b>60 minimum / 120 strong</b><span class="small">Below 60 sessions is exploratory; STRONG promotion requires at least 120 completed sessions.</span></div>
+      <div class="item"><b>2,000 minimum / 5,000 strong</b><span class="small">Enough observations across the strategy set; STRONG promotion also requires positive verified net edge.</span></div>
+      <div class="item"><b>Frozen / blind Replay</b><span class="small">The selector must be tested on an evaluation window that was not used to derive its evidence.</span></div>
+    </div>
+    <div class="note" id="contractNote">Loading the current evidence gate…</div>
+    <div class="actions"><button class="primary" onclick="loadAll()">↻ Refresh evidence</button><button class="green" onclick="downloadLatestReport('zip')">⬇️ Download evidence report</button><button onclick="downloadLatestReport('html')">📄 Human-readable report</button><button class="green" onclick="goToExportData()">🗄️ Get / repair market data</button><button onclick="goToReplay()">🧪 Run blind Replay validation</button></div>
+  </div></div>
+
+  <div class="card section"><div class="head"><strong>Active evidence used by Paper / Live</strong><span>only an explicitly activated STRONG snapshot is eligible</span></div><div class="body" id="activeSummary">Loading…</div></div>
+
+  <div class="card section"><div class="head"><strong>Evidence registry</strong><span>Rapid snapshots are raw dataset runs; no learning is silently applied</span></div><div class="table"><table><thead><tr><th>Snapshot</th><th>Dataset</th><th>Sessions</th><th>Signals</th><th>Coverage</th><th>Grade</th><th>Gate</th><th>Blind validation</th><th>Status</th><th></th></tr></thead><tbody id="snapshotsBody"><tr><td colspan="10" class="small">Loading…</td></tr></tbody></table></div></div>
+
+  <div class="card section" id="detailCard" style="display:none"><div class="head"><strong id="detailTitle">Snapshot detail</strong><span id="detailSub"></span></div><div class="body"><div class="actions" style="margin-top:0"><button class="green" id="downloadSnapshotReportBtn" onclick="downloadSelectedReport('zip')">⬇️ Download this snapshot report</button><button id="downloadSnapshotHtmlBtn" onclick="downloadSelectedReport('html')">📄 HTML report</button></div>
+    <div class="statgrid"><div class="stat"><b id="dSessions">—</b><span>Sessions</span></div><div class="stat"><b id="dSignals">—</b><span>Signals</span></div><div class="stat"><b id="dCoverage">—</b><span>Coverage</span></div><div class="stat"><b id="dPF">—</b><span>Avg PF rows</span></div><div class="stat"><b id="dWin">—</b><span>Avg Win % rows</span></div><div class="stat"><b id="dNet">—</b><span>Avg Net / trade</span></div><div class="stat"><b id="dPathPF">—</b><span>Avg Path PF</span></div><div class="stat"><b id="dExit">—</b><span>Exit paths</span></div></div>
+    <div class="note" id="detailGate"></div><div class="details" id="detailChanges"></div><div class="table" style="margin-top:10px"><table><thead><tr><th>Strategy</th><th>Regime</th><th>Volatility</th><th>Time</th><th>Side</th><th>N</th><th>Win %</th><th>PF</th><th>Avg net</th><th>Guidance</th></tr></thead><tbody id="contextMapBody"><tr><td colspan="10" class="small">Loading context map…</td></tr></tbody></table></div>
+  </div>
+  <div class="table"><table><thead><tr><th>Strategy</th><th>Regime</th><th>Volatility</th><th>Time</th><th>Side</th><th>Signals</th><th>Win %</th><th>PF</th><th>Avg Net</th><th>MFE / MAE</th><th>Path PF</th><th>Path Win %</th><th>Target</th><th>Stop</th><th>Trailing</th><th>Force</th><th>EOD</th><th>Profit→Loss</th><th>Stop→No Recover</th><th>Recovered after Stop</th><th>Status / Diagnosis</th></tr></thead><tbody id="detailRows"><tr><td colspan="21">Select a snapshot.</td></tr></tbody></table></div></div>
+
+  <div class="card section"><div class="head"><strong>Decision audit — thought vs actual</strong><span>recorded at decision time; no future data is used to explain the past</span></div><div class="body"><div class="note" id="auditNote">Loading recent frozen/test trades…</div><div class="table" style="margin-top:10px"><table><thead><tr><th>Strategy</th><th>Trades</th><th>Expected WR</th><th>Actual WR</th><th>WR drift</th><th>Expected PF</th><th>Actual PF</th><th>PF drift</th><th>Expected Edge</th><th>Actual Avg Net</th><th>Edge drift</th><th>Avg MFE</th><th>Exit failures</th><th>Dominant failure</th><th>Smart diagnosis</th><th>Next blind experiment</th></tr></thead><tbody id="auditSummary"><tr><td colspan="16">Loading…</td></tr></tbody></table></div></div>
+  <div class="table"><table><thead><tr><th>Date / Time</th><th>Stock</th><th>Strategy</th><th>Context</th><th>Expected WR</th><th>Expected Edge</th><th>Expected PF</th><th>Actual Net</th><th>Outcome</th><th>Exit</th><th>Failure</th><th>Diagnosis</th><th>Management</th><th>MFE / MAE</th><th>Holding</th><th>Selector thought</th></tr></thead><tbody id="auditTrades"><tr><td colspan="16" class="small">Loading…</td></tr></tbody></table></div>
+</div></div>
+
+  <div class="card section"><div class="head"><strong>Smart-brain operating rules</strong><span>evidence first, strategy rules fixed</span></div><div class="body">
+    <div class="matrix">
+      <div class="item"><b>1. Prove before promoting</b><span class="small">No strategy is called “good” from a tiny sample. Promotion requires coverage, sample size and blind Replay.</span></div>
+      <div class="item"><b>2. Compare expectation vs reality</b><span class="small">Every selected trade carries expected win probability, net edge and PF context; the audit computes the realized deltas.</span></div>
+      <div class="item"><b>3. Separate entry from exit</b><span class="small">High MFE with weak realized net and many exit failures points to management leakage rather than an automatic entry failure.</span></div>
+      <div class="item"><b>4. Never tune on the test window</b><span class="small">This page diagnoses failures. It does not alter the 20 strategies, thresholds or exits after seeing evaluation trades.</span></div>
+    </div>
+    <div class="note">To increase winners scientifically, first identify whether the loss is caused by entry/context, payoff distribution, or exit timing. Then rerun a fresh blind holdout with the same strategy definitions. Any change must be specified before the new test, never inferred from the result and applied back into the same data.</div>
+  </div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=n=>n==null?'—':Number(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+const pct=n=>n==null?'—':`${Number(n).toFixed(2)}%`;
+const pf=n=>n==null?'—':Number(n).toFixed(3);
+async function jsonFetch(url,opts){
+  const r=await fetch(url,Object.assign({cache:'no-store',headers:{'Accept':'application/json'}},opts||{}));
+  const txt=await r.text();
+  let d=null; try{d=txt?JSON.parse(txt):{}}catch(e){throw new Error(`Server returned non-JSON for ${url} (HTTP ${r.status}). This usually means the deployed app is running an older route or a proxy returned HTML. Deploy the matching backend and retry.`)}
+  if(!r.ok||d.ok===false) throw new Error(d.error||`Request failed (${r.status})`);
+  return d;
+}
+function goToExportData(){window.location.href='/?open=export';}
+function goToReplay(){window.location.href='/?open=replay';}
+let selectedSnapshotId=null;
+function downloadLatestReport(format){ window.location.href=`/api/evidence/report?format=${encodeURIComponent(format||'zip')}`; }
+function downloadSelectedReport(format){ if(!selectedSnapshotId){alert('Select an evidence snapshot first.');return;} window.location.href=`/api/evidence/report?snapshot_id=${selectedSnapshotId}&format=${encodeURIComponent(format||'zip')}`; }
+async function loadSnapshots(){
+  try{
+    const d=await jsonFetch('/api/evidence/snapshots?limit=50');
+    const rows=d.snapshots||[];
+    $('snapshotsBody').innerHTML=rows.length?rows.map(s=>{
+      const g=s.evidence_gate||{}; const summary=s.summary||{}; const b=summary.blind_validation||{};
+      const cls=String(s.status||'');
+      return `<tr><td><strong>#${esc(s.id)}</strong><br><span class="small">${esc(s.created_at||'')}</span></td><td><span class="mono">${esc(s.dataset_fingerprint||'—')}</span><br>${esc(s.start_date||'—')} → ${esc(s.end_date||'—')}</td><td>${num(s.sessions)}</td><td>${num(s.signals_analyzed)}</td><td>${pct(s.coverage_pct)}</td><td><span class="tag ${s.evidence_grade==='STRONG'?'good':(s.evidence_grade==='EVIDENCE_READY'?'warn':'bad')}">${esc(s.evidence_grade||'INCOMPLETE')}</span></td><td>${g.strong_ok?'<span class="tag good">STRONG OK</span>':'<span class="tag warn">'+esc(g.reasons&&g.reasons[0]||'Not ready')+'</span>'}</td><td>${esc(b.status||'MISSING')}</td><td class="status ${esc(cls)}">${esc(s.status)}</td><td><button onclick="loadSnapshot(${Number(s.id)})">View</button> <button onclick="window.location.href='/api/evidence/report?snapshot_id=${Number(s.id)}&format=zip'">⬇️ Report</button>${s.status==='ready'&&g.strong_ok&&b.status==='PASS'?` <button class="green" onclick="activateSnapshot(${Number(s.id)})">Activate</button>`:''}</td></tr>`;
+    }).join(''):'<tr><td colspan="10" class="small">No Rapid evidence snapshots yet. Acquire/verify data in Export Data, then run Rapid on that exact raw dataset.</td></tr>';
+    const active=rows.find(x=>x.status==='active');
+    $('activeSummary').innerHTML=active?`<strong>Active snapshot #${esc(active.id)}</strong> · ${esc(active.start_date)} → ${esc(active.end_date)} · ${num(active.signals_analyzed)} signals · ${pct(active.coverage_pct)} coverage · dataset <span class="mono">${esc(active.dataset_fingerprint||'—')}</span>`:'<span class="small">No evidence snapshot is active. This is intentional until a STRONG evidence snapshot passes blind/frozen Replay validation and you explicitly activate it.</span>';
+  }catch(e){$('snapshotsBody').innerHTML=`<tr><td colspan="10" class="bad">${esc(e.message)}</td></tr>`;$('activeSummary').innerHTML=`<div class="note bad">${esc(e.message)}</div>`}
+}
+async function loadSnapshot(id){
+  try{
+    selectedSnapshotId=Number(id);
+    const d=await jsonFetch(`/api/evidence/snapshots/${id}`); const s=d.snapshot||{}; const rows=d.rows||[]; const g=s.evidence_gate||{};
+    $('detailCard').style.display='block';$('detailTitle').textContent=`Evidence snapshot #${s.id} · ${s.evidence_grade||'INCOMPLETE'}`;$('detailSub').textContent=`${s.start_date||'—'} → ${s.end_date||'—'} · ${s.dataset_fingerprint||'—'}`;
+    $('dSessions').textContent=num(s.sessions);$('dSignals').textContent=num(s.signals_analyzed);$('dCoverage').textContent=pct(s.coverage_pct);
+    const finite=x=>Array.isArray(rows)?rows.filter(r=>r.regime==='ALL'||!r.regime).length?rows.filter(r=>r.regime==='ALL'||!r.regime):rows:rows;
+    const base=finite(rows); const avg=k=>{const a=base.map(r=>Number(r[k])).filter(Number.isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null};
+    $('dPF').textContent=pf(avg('profit_factor'));$('dWin').textContent=pct(avg('win_rate_pct'));$('dNet').textContent=pct(avg('avg_net_return_pct'));$('dPathPF').textContent=pf(avg('path_profit_factor'));$('dExit').textContent=num(s.path_exit_signals);
+    const reason=(g.reasons||[]).map(x=>`• ${x}`).join('\n');$('detailGate').innerHTML=`<strong>Gate:</strong> ${g.strong_ok?'STRONG — eligible after blind validation':'Not yet promotable'}${reason?`<br><span class="small">${esc(reason)}</span>`:''}`;
+    const summary=s.summary||{};$('detailChanges').textContent=JSON.stringify({changes:s.changes||[],evidence_gate:g,blind_validation:summary.blind_validation||{},registry_version:s.registry_version||'—'},null,2);
+    const ctx=rows.filter(r=>r.regime&&r.regime!=='ALL').sort((a,b)=>Number(b.signals_analyzed||b.signals||0)-Number(a.signals_analyzed||a.signals||0));
+    $('contextMapBody').innerHTML=ctx.length?ctx.slice(0,200).map(r=>{const n=Number(r.signals_analyzed??r.signals??0);const net=Number(r.avg_net_return_pct??r.avg_net_pct??0);const pfx=Number(r.profit_factor||0);const usable=n>=25&&net>0&&pfx>1;return `<tr><td><strong>${esc(r.strategy_name||r.strategy_id)}</strong></td><td>${esc(r.regime||'—')}</td><td>${esc(r.volatility_bucket||'—')}</td><td>${esc(r.time_bucket||'—')}</td><td>${esc(r.side||'ALL')}</td><td>${num(n)}</td><td>${pct(r.win_rate_pct)}</td><td>${pf(r.profit_factor)}</td><td>${pct(r.avg_net_return_pct??r.avg_net_pct)}</td><td><span class="tag ${usable?'good':'bad'}">${usable?'QUALIFIED CONTEXT':'NOT QUALIFIED'}</span></td></tr>`}).join(''):'<tr><td colspan="10" class="small">No context rows stored.</td></tr>';
+    $('detailRows').innerHTML=rows.length?rows.map(r=>`<tr><td><strong>${esc(r.strategy_name||r.strategy_id)}</strong></td><td>${esc(r.regime||'ALL')}</td><td>${esc(r.volatility_bucket||'ALL')}</td><td>${esc(r.time_bucket||'ALL')}</td><td>${esc(r.side||'ALL')}</td><td>${num(r.signals_analyzed)}</td><td>${pct(r.win_rate_pct)}</td><td>${pf(r.profit_factor)}</td><td>${pct(r.avg_net_return_pct)}</td><td>${pct(r.avg_mfe_pct)} / ${pct(r.avg_mae_pct)}</td><td>${pf(r.path_profit_factor)}</td><td>${pct(r.path_win_rate_pct)}</td><td>${num(r.target_exits)}</td><td>${num(r.stop_exits)}</td><td>${num(r.trailing_exits)}</td><td>${num(r.force_exits)}</td><td>${num(r.eod_exits)}</td><td>${num(r.profit_reached_but_lost)}</td><td>${num(r.stop_reached_no_recovery)}</td><td>${num(r.recovered_after_stop)}</td><td><strong>${esc(r.status||'—')}</strong><br><span class="small">${esc(r.diagnosis||'')}</span></td></tr>`).join(''):'<tr><td colspan="21">No evidence rows stored.</td></tr>';
+    $('detailCard').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){$('detailCard').style.display='block';$('detailChanges').textContent=e.message}
+}
+async function activateSnapshot(id){
+  try{const d=await jsonFetch(`/api/evidence/snapshots/${id}/activate`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});alert(d.message||'Activated');loadAll();}
+  catch(e){alert(e.message)}
+}
+async function loadAudit(){
+  try{
+    const d=await jsonFetch('/api/evidence/decision-audit?days=3650&limit=5000');
+    $('auditNote').textContent=`${num(d.trade_count)} frozen/test trades analyzed. Expectations were recorded at decision time; actual PF is calculated from realized net trade returns. This report diagnoses failures and does not modify strategies.`;
+    const ss=d.strategy_summaries||[];
+    $('auditSummary').innerHTML=ss.length?ss.map(s=>{let action=s.smart_focus==='exit_management'?'Pre-register an exit-timing/protection experiment and run it only on a fresh blind holdout.':s.smart_focus==='entry_context'?'Pre-register a context-gating experiment (regime/volatility/extension) and validate it on a fresh blind holdout.':s.smart_focus==='payoff_distribution'?'Pre-register target/stop/payoff changes and validate them on a fresh blind holdout.':s.smart_focus==='failure_class'?'Inspect the dominant failure class, write the change before the next test, then validate on unseen data.':'Collect more blind evidence before changing anything.';return `<tr><td><strong>${esc(s.strategy_name||s.strategy_id)}</strong></td><td>${num(s.trades)}</td><td>${pct(s.expected_win_rate_pct)}</td><td>${pct(s.actual_win_rate_pct)}</td><td>${pct(s.win_rate_drift_pct)}</td><td>${pf(s.expected_profit_factor_avg)}</td><td>${pf(s.actual_profit_factor)}</td><td>${s.pf_drift==null?'—':pf(s.pf_drift)}</td><td>${pct(s.expected_edge_pct_per_trade)}</td><td>${pct(s.actual_avg_net_pct)}</td><td>${pct(s.edge_drift_pct)}</td><td>${pct(s.avg_mfe_pct)}</td><td>${num(s.exit_failures)}</td><td>${esc(s.dominant_failure||'NONE')}</td><td><div class="diag">${esc(s.smart_diagnosis||'—')}<br><span class="small">Focus: ${esc(s.smart_focus||'—')}</span></div></td><td><div class="diag">${esc(action)}</div></td></tr>`}).join(''):'<tr><td colspan="16" class="small">No frozen/test trade ledger found yet.</td></tr>';
+    const ts=d.trades||[];
+    $('auditTrades').innerHTML=ts.length?ts.map(t=>`<tr><td>${esc(t.trading_date||'')}<br>${esc(t.entry_time||'')} → ${esc(t.exit_time||'')}</td><td>${esc(t.ticker||'')}</td><td><strong>${esc(t.strategy_name||t.strategy_id)}</strong></td><td>${esc(t.regime||'—')} · ${esc(t.volatility_bucket||'—')} · ${esc(t.time_bucket||'—')}<br>${esc(t.extension_bucket||'—')} · ${esc(t.relative_strength_bucket||'—')}</td><td>${pct(t.calibrated_win_prob_pct)}</td><td>${pct(t.expected_net_edge_pct)}</td><td>${pf(t.expected_profit_factor)}</td><td>${pct(t.net_return_pct)}</td><td>${esc(t.outcome||'—')}</td><td>${esc(t.exit_reason||'—')}</td><td>${esc(t.failure_type||'NONE')}</td><td>${esc(t.diagnosis||'—')}<br><span class="small">${esc(t.suggested_focus||'')}</span></td><td>${t.profit_protection_armed?'armed':'not armed'} · ${t.trailing_stop_activated?'trail active':'no trail'}<br><span class="small">giveback ${pct(t.trailing_stop_giveback_pct)}</span></td><td>${pct(t.mfe_pct)} / ${pct(t.mae_pct)}</td><td>${num(t.holding_minutes)} min</td><td>${esc(t.strategy_why||'—')}</td></tr>`).join(''):'<tr><td colspan="15" class="small">No decision trades found.</td></tr>';
+  }catch(e){$('auditNote').className='note bad';$('auditNote').textContent=e.message}
+}
+async function loadAll(){await Promise.all([loadSnapshots(),loadAudit()]);}
+loadAll();setInterval(loadSnapshots,15000);setInterval(loadAudit,20000);
+</script>
+</body></html>

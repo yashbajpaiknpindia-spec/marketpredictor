@@ -1,0 +1,45 @@
+{
+  "release": "UltraScalp Synthetic L5 Edge Lab v2",
+  "date": "2026-10-07",
+  "base": "MarketPredictor-UltraScalp-L5-REAL-REPLAY-2026-10-07",
+  "checks": {
+    "python_compile_app_and_lab": "passed",
+    "browser_inline_js_node_check": "passed",
+    "targeted_ultrascalp_regression_tests": "38/38 passed",
+    "default_synthetic_smoke": "passed",
+    "full_pytest": "collection blocked in build container: psycopg2 and ijson are not installed locally; both are pinned in requirements.txt",
+    "flask_production_boot": "not executed in build container because Flask is not installed locally; packaged requirements includes Flask 3.0.3"
+  },
+  "laboratory": {
+    "evidence_class": "SYNTHETIC_L5_CONTROLLED_LAB_V2",
+    "regime_count": 25,
+    "levels_each_side": 5,
+    "train_validation_test": "whole-session split inside every regime",
+    "hidden_state_excluded_from_model": true,
+    "fixed_target_dependency": false,
+    "execution": "point-in-time with configurable latency, spread, slippage, adverse selection and round-trip friction",
+    "exit": "edge disappearance, protection or max hold",
+    "no_edge_regime": true,
+    "latency_robustness": "0-3 bars"
+  },
+  "default_smoke": {
+    "sessions_per_regime": 6,
+    "bars_per_session": 360,
+    "train_sessions": 100,
+    "validation_sessions": 25,
+    "blind_test_sessions": 25,
+    "blind_test_trades": 470,
+    "blind_test_win_rate_pct": 47.8723404255,
+    "blind_test_avg_net_pct": 0.2869704299,
+    "blind_test_profit_factor": 2.8888685038,
+    "no_edge_trades": 4,
+    "no_edge_participation_pct": 1.2158054711,
+    "caveat": "Synthetic controlled-lab result only; not NSE performance evidence."
+  },
+  "safety": [
+    "Real L5 live/paper logic remains separate from synthetic evidence.",
+    "TRUE_L5_REPLAY and EMPIRICAL_L5_PROXY evidence classes remain separate.",
+    "No database tables are dropped, truncated or recreated by this build.",
+    "Synthetic result cannot authorize live trading."
+  ]
+}

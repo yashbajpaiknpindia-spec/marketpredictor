@@ -1,0 +1,25 @@
+{
+  "release": "UltraScalp 250 universe + estimator + settings + database load hardening",
+  "date": "2026-10-07",
+  "checks": {
+    "python_compile": "passed",
+    "browser_inline_js_node_check": "passed",
+    "scalper_tests": "31/31 passed",
+    "static_endpoint_audit": "14/14 passed"
+  },
+  "key_fixes": [
+    "Settings persistence uses atomic upsert and verifies universe_limit round-trip.",
+    "Legacy 40-stock request/worker fallback removed; new default is 250.",
+    "Unsaved Scalper UI controls are protected from 3-second status polling overwrites.",
+    "Save settings preserves the enabled state; Save & Arm explicitly enables capture.",
+    "Estimator resolves requested LargeMidcap-250 selection count before estimating rows.",
+    "Estimator/session list no longer execute full-table COUNT scans over scalper snapshots/trades.",
+    "Storage relation stats use session snapshot ledger totals plus pg_total_relation_size with a short cache.",
+    "Observed effective polling cycle now includes request/processing time plus configured wait.",
+    "Provider endpoints remain /market/quotes/full, /market/quotes/mkt, /market/quotes/ltp with 250 batching."
+  ],
+  "runtime_limitations": [
+    "Full Flask production boot was not executed in this container because Flask/psycopg2 are not installed.",
+    "Live INDstocks calls require the deployment credentials and were not executed from the build environment."
+  ]
+}

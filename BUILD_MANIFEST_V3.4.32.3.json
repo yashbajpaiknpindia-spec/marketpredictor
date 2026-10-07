@@ -1,0 +1,21 @@
+{
+  "version": "3.4.32.3",
+  "title": "Replay Export Fallback + Preflight Reliability",
+  "root_layout": true,
+  "shard_count_python_occurrences": 0,
+  "targeted_tests": "22 passed",
+  "python_compile": [
+    "app.py",
+    "historical_export.py"
+  ],
+  "files_sha256": {
+    "app.py": "d2c579bfa5a4cb9d1bdb3320c89e245d236bdbff4287b807d22888a219479712",
+    "historical_export.py": "7d8c379f5fd1052c412a322e9a75f00effbe6239a5d57b9286503cf97ff6b276",
+    "templates/index.html": "301a9ed31b5184b92792e276ae83742494db0b010b78b0ef53e9393b28cf158d",
+    "strategies.py": "37ae5e1912d75e8753a3dc2cc2873e525f9e152c97be10323b69ec0b2f850e49",
+    "requirements.txt": "6332244e01b23e671020c7e338402921a2f204145ff5ef8a55d3288ccbf660dc",
+    "render.yaml": "543142810fb2372afa1dad807261d732a49f9cc664151fcc705a0933db130df8",
+    ".python-version": "61141e9590171b900fdf709e7ea8f050d5c2a69198d4a4a1977d7c45186307e5",
+    "V3.4.32.3_REPLAY_EXPORT_FALLBACK_FIX.md": "a595e8fbafa428ec6d0be75706fd93333477f5759c60687cf385882dd1cd70e5"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "version": "v3.4.20.2",
+  "base": "v3.4.20-research-sweep-hotfix1",
+  "purpose": "Replay terminal timing correction, accurate segmented-parent ETA, full application-data export/import.",
+  "strategies_sha256": "e444961282d651bb6a3981647a2ad2e71ce37026735c75c95713580b8c05b7e5",
+  "changed_files": {
+    "app.py": "85020c28f6dcbd29e72504d8d9d77411a614ad58f1a4c454f5f3db9216a3c5cc",
+    "app_data_backup.py": "139e3ebb8b3d7cb453d675fcf10a51c8d47177ef6ccd4e96eae9c881483b1a20",
+    "templates/index.html": "dda6a936f4b2f06094f15c9891ecfafe188b33b30c85fc4bf2bc51e81f1bc737",
+    "tests/test_v3_4_20_2_timing_backup_static.py": "8985a8dda06e7ebf8140269a1c9d87eefcec47bf1fe79011fdb1900a589b110d",
+    "V3.4.20.2_TIMING_AND_FULL_DATA_BACKUP.md": "a6824a303b234000180e1f0afab97e9d20e7ddbe9a095850e1a7dbb171b4dba2"
+  },
+  "validation": {
+    "pytest_targeted": "17 passed",
+    "python_compile": "passed for all Python files",
+    "inline_javascript_syntax": "passed",
+    "strategies_byte_identical_to_original": true,
+    "strategies_sha256": "e444961282d651bb6a3981647a2ad2e71ce37026735c75c95713580b8c05b7e5"
+  }
+}

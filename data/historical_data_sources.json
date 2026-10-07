@@ -1,0 +1,54 @@
+{
+  "purpose": "V2 historical research and execution-data source registry",
+  "required_contract": {
+    "primary_signal_interval": "5m",
+    "execution_interval": "1m",
+    "rule": "Never synthesize 1-minute execution candles from 5-minute OHLCV. If real 1m history is absent, simulation must declare compatibility mode."
+  },
+  "sources": [
+    {
+      "name": "DhanHQ Intraday Historical API",
+      "type": "broker_api",
+      "url": "https://dhanhq.co/docs/v2/historical-data/",
+      "coverage": "1, 5, 15, 25, 60 minute OHLCV; documentation states up to 5 years for active instruments and 90 days per poll window",
+      "role": "preferred 1m execution-history adapter"
+    },
+    {
+      "name": "Upstox Historical Candle API V3",
+      "type": "broker_api",
+      "url": "https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/",
+      "coverage": "minute history from January 2022; 1-15 minute requests have a one-month retrieval window",
+      "role": "secondary 1m execution-history adapter and India VIX/global-instrument support"
+    },
+    {
+      "name": "NSE Historical Index / India VIX",
+      "type": "exchange",
+      "url": "https://www.nseindia.com/reports-indices-historical-vix",
+      "coverage": "official NSE historical India VIX data; use for benchmark/event research where historical resolution is available",
+      "role": "authoritative benchmark reference"
+    },
+    {
+      "name": "NSE Real-time 1 Minute / 5 Minute Snapshot",
+      "type": "exchange_commercial",
+      "url": "https://www.nseindia.com/static/market-data/real-time-data-subscription",
+      "coverage": "official exchange 1-minute and 5-minute snapshot feed; commercial/SFTP product",
+      "role": "production-grade archival fallback"
+    },
+    {
+      "name": "Indian Stock Market Minute Data (Hugging Face)",
+      "type": "public_dataset",
+      "url": "https://huggingface.co/datasets/rahulkrraj/indian-stock-market-minute-data",
+      "coverage": "large multi-year minute dataset; suitability and licensing must be verified before production use",
+      "role": "research-only external corpus when bytes are accessible"
+    }
+  ],
+  "current_local_research_corpus": {
+    "interval": "5m",
+    "sessions": 61,
+    "date_start": "2026-06-24",
+    "date_end": "2026-09-18",
+    "stocks_with_data": 225,
+    "stock_day_files": 13725,
+    "limitation": "The locally accessible corpus used for this run does not contain usable 1m, NIFTY, India VIX, or sector-index intraday observations and uses the then-current LargeMidcap universe snapshot retrospectively."
+  }
+}

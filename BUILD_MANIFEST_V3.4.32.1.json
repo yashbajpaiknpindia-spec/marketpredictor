@@ -1,0 +1,12 @@
+{
+  "version": "3.4.32.1",
+  "purpose": "Export Data hydration parser fix + durable archive state reconciliation + 512MB synthetic verification",
+  "files": {
+    "app.py": "6eccfa8b2adfbd4dd0878542913834f2a7c64b480b2a38d594cd090f6965958f",
+    "historical_export.py": "7d8c379f5fd1052c412a322e9a75f00effbe6239a5d57b9286503cf97ff6b276",
+    "tests/test_export_persistence_hydration.py": "64f3021a021b22a5ad2c05d441799dd940cb44a22b4c0f228be0ae07521a2c06",
+    "tests/stress_render_512mb_export_hydration.py": "d09e70f4fb6b8f1338730ab77dc62ff7dee560f4fe3dbfd1b5af9862442445cc",
+    "V3.4.32.1_EXPORT_HYDRATION_MEMORY_FIX.md": "df7cc077a71466ec435f7ab2c24fad0580209c3505db9736cb02336f5dccd73a",
+    "RENDER_512MB_SYNTHETIC_TEST_RESULTS.json": "56c2aa83ffd0fb08a7f139c2a2ab9b44d34b2286f2a8574a5b0301f51be65937"
+  }
+}

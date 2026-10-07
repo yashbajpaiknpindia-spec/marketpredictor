@@ -1,0 +1,107 @@
+{
+  "version": "3.0.0-research-alpha-first",
+  "scope": {
+    "markets": [
+      "NSE",
+      "BSE"
+    ],
+    "asset_class": "cash_equity",
+    "intraday_only": true,
+    "fno": false
+  },
+  "research_baseline": {
+    "capital_inr": 200000,
+    "notional_baseline_inr": 65000
+  },
+  "intervals": {
+    "structure": "5m_completed",
+    "execution": "1m_when_real_data_exists",
+    "synthetic_1m_allowed": false
+  },
+  "modes": [
+    "live",
+    "paper",
+    "replay",
+    "backtest"
+  ],
+  "model_statuses": [
+    "research_only",
+    "candidate",
+    "validated",
+    "production_authorized",
+    "retired"
+  ],
+  "candidate_families": [
+    "momentum_continuation",
+    "breakout_expansion",
+    "compression_expansion",
+    "vwap_structure",
+    "mean_reversion",
+    "relative_strength",
+    "market_sector_stock_alignment",
+    "opening_behavior",
+    "failed_breakout",
+    "volatility_event_conditioned"
+  ],
+  "prediction_heads": [
+    "direction",
+    "remaining_move",
+    "mfe",
+    "mae",
+    "time_to_event"
+  ],
+  "labels": {
+    "entry": "next_executable_event",
+    "forward_horizons_bars": [
+      1,
+      2,
+      3,
+      6,
+      9,
+      12
+    ]
+  },
+  "cost_accounting": {
+    "mandatory_costs_separate": true,
+    "slippage_separate": true,
+    "slippage_scenarios_bps": [
+      0,
+      2,
+      5,
+      10
+    ],
+    "fixed_rupee_floor": false
+  },
+  "risk": {
+    "daily_loss_limit_required": true,
+    "max_concurrent_positions_required": true,
+    "correlation_deduplication": true
+  },
+  "validation": [
+    "walk_forward",
+    "purged_oos",
+    "regime_breakdown",
+    "ablation",
+    "placebo_permutation",
+    "parameter_robustness",
+    "blind_test",
+    "paper_execution"
+  ],
+  "exports": [
+    "candidates.csv",
+    "decisions.csv",
+    "trades.csv",
+    "orders.csv",
+    "one_minute_market.csv",
+    "five_minute_features.csv",
+    "model_predictions.csv",
+    "cost_ledger.csv",
+    "portfolio_state.csv",
+    "risk_events.csv",
+    "experiment_manifest.json",
+    "fold_results.csv",
+    "regime_results.csv",
+    "daily_results.csv",
+    "rejected_candidates.csv"
+  ]
+}

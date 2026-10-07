@@ -1,0 +1,13 @@
+{
+  "version": "3.4.31.1",
+  "purpose": "DB bootstrap state race fix + synthetic bootstrap diagnostics",
+  "files": {
+    "app.py": "97a2e34f868f8fee595c8eb2a4391f386ffd5ab49ec852efbb9aa73d4aeac5a9",
+    "templates/index.html": "05d5311ca60885df92edba5619778aaf72f6e0ae426d15091dc326e259a2d286",
+    "V3.4.31.1_RELEASE.md": "89607af8f89c39689f00e301e0a2b01b5feb65819cf834365418dd17a18bd330",
+    "V3.4.31.1_DB_BOOTSTRAP_STATE_FIX.md": "81ce483e0c7237e7bdfa6a9d49dc70dfe32073cd11d0281cc25a2eef5169562f",
+    "tests/test_v3_4_31_synthetic_db_bootstrap.py": "786710b4bbcc01ba3603965680b5372bf239ef78c45498d9b535a4f9f519384e",
+    "tests/test_v3_4_31_synthetic_db_worker.py": "377869a11b5a0269baa8de989e4deaa1b7631d621141118cd70b259feeb18e93",
+    "tests/test_v3_4_31_schema_lock_and_ui_static.py": "9c96d41712c64aa807143e2af3d796427e35efed9b660ebfff938dac80047994"
+  }
+}

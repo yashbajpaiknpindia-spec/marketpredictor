@@ -1,0 +1,22 @@
+{
+  "release": "UltraScalp UI separation + evidence presentation final 2026-10-05",
+  "scalper_page": "scalperView",
+  "intraday_page": "intradayView",
+  "scalper_priority": true,
+  "ai_copilot_hidden": true,
+  "tests": "14 passed targeted; Python compilation passed; JS syntax passed",
+  "files": {
+    "templates/index.html": "de47ee6090e854f8682bffe8658ffc3fec67cf7b38a51aaf0450ab62bedd57f4",
+    "app.py": "412a0bea42d576eaba196d1d7f8671069695410f52cb9a2b8e9856c04ebbd97c",
+    "indstocks_client.py": "531c7c522ef1d02d6c5943ee10ee475a02ffa75adf7690bcbbdbf9859e889e5e",
+    "research/scalper/ultra_scalper_engine.py": "6846ba0053c2406e4bedafb8b48d4e14dbb9c5efd4ce0e00ad211db25cd4ca79",
+    "research/scalper/research_manifest.json": "cedcc4fe77bac223aad32ad700f626753bde73b4b7ab817946b0256899e533fd",
+    "tests/test_scalper_research_ui_static.py": "2f512bc2c31c7ee0a821d337c1c1e17beaa953520c0a6df1f5fd020ff1548f39",
+    "tests/test_scalper_intraday_separation_static.py": "5524f0780c4a139d0066508d5a05994778f71eea7dab3de6a0bf33ef497e68eb",
+    "requirements.txt": "4a4848f4bde9c358b8065e1511b6d2d3f00e754a5a657e90879cd25c22af194c",
+    ".python-version": "61141e9590171b900fdf709e7ea8f050d5c2a69198d4a4a1977d7c45186307e5",
+    "Procfile": "14ef5b87231174f2d86a2d8e1029a56087dda0f2c2f8006685a9e80103cb3c85",
+    "render.yaml": "834118a6dd4ca57654ce6cb28a187ddfce99e5dcea2bb3aa4ea2b88c7a9e80a8",
+    "SCALPER_LIVE_DATA_PLAN.md": "da003d4f781f568ab32c68d5e6040cabdffb9a0766534bb046603998c620d415"
+  }
+}

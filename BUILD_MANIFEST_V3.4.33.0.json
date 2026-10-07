@@ -1,0 +1,64 @@
+{
+  "release": "v3.4.33.0-real-data-evidence-v1",
+  "purpose": "Canonical real market-data acquisition + evidence-grade Rapid Scan + optional Paper/Live evidence promotion",
+  "synthetic_rapid": false,
+  "canonical_interval": "1m",
+  "rapid_min_verified_coverage_pct": 100.0,
+  "files": [
+    {
+      "path": "app.py",
+      "bytes": 1763586,
+      "sha256": "74ec9b03a466726b41f6fe0fae4fb3ebfa6bc06902eb3223b7c96475918315ba"
+    },
+    {
+      "path": "rapid_forensics.py",
+      "bytes": 61003,
+      "sha256": "0cd9c80f13475b97f29f216078e834e4b143f4fe3abcc108aa51b6b7c2505521"
+    },
+    {
+      "path": "market_data.py",
+      "bytes": 10499,
+      "sha256": "9613b5bc2281539361b11126b54ef133ff7876ae4f1eec1714c596dc5bbf94b7"
+    },
+    {
+      "path": "indstocks_client.py",
+      "bytes": 31155,
+      "sha256": "531c7c522ef1d02d6c5943ee10ee475a02ffa75adf7690bcbbdbf9859e889e5e"
+    },
+    {
+      "path": "historical_fallbacks.py",
+      "bytes": 15860,
+      "sha256": "0da8651f564cd1518be9f8414c862fa5c5e2b78405e2c8afb1d495905e84994c"
+    },
+    {
+      "path": "templates/index.html",
+      "bytes": 490828,
+      "sha256": "7343608b43bb0246f5596dd32542e92135a68e2a224c7e6e3a8235d0e6a123df"
+    },
+    {
+      "path": "templates/market_data_evidence.html",
+      "bytes": 18816,
+      "sha256": "b7a4e712c055b23972d8e6fd194f9c938700dd6a985684b7eaa2b3b6e4e05ef4"
+    },
+    {
+      "path": "tests/test_market_data_evidence_static.py",
+      "bytes": 1871,
+      "sha256": "ac12faa425b17b2e7b0a6f50abbb892ec6f90b6cdfd9afd1a3d167cb1cff24a1"
+    },
+    {
+      "path": "tests/test_rapid_real_source_lock.py",
+      "bytes": 1789,
+      "sha256": "a4ab46afbac6fcbaec79089682061a57883bd31932ced364b3186248b5dc6be6"
+    },
+    {
+      "path": "tests/test_v3_4_32_5_path_aware_stop_static.py",
+      "bytes": 5167,
+      "sha256": "2b9162467b2dd2ec063eb5941968790f34bbd6849886c4a1b4cdd5038f58ff60"
+    },
+    {
+      "path": "V3.4.33_REAL_DATA_EVIDENCE.md",
+      "bytes": 3711,
+      "sha256": "ac721baa0864331e16499fa8a5498ecb75bb94bb6a71e56a38ea7ecdd01ed344"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": "3.4.31.2",
+  "purpose": "DB bootstrap worker supervision and startup race fix",
+  "files": {
+    "app.py": "b27df9e12a78c5fbe3e56e1f354490f2347575058ae034639689af01edf57bba",
+    "templates/index.html": "05d5311ca60885df92edba5619778aaf72f6e0ae426d15091dc326e259a2d286",
+    "V3.4.31.2_RELEASE.md": "b13806026098963f9d29df7d81d9e4544f38d5ca0c2c94951dc33b6c62f5ff5c",
+    "README.md": "cc4392a02103bb2793103c058be0325b33126ccb7cf3e607fbac4ca38023439d",
+    "tests/test_v3_4_31_2_bootstrap_supervision.py": "3ad4c02b0ab195f4c5e8cd90fa6c8bee6c87c8eaf1e1f80dfe04319d3efca29a",
+    "tests/test_v3_4_31_synthetic_db_bootstrap.py": "82ebe6cfa755f96424baed222bf32e767014ec3bcae198758866b70808bbda7c"
+  }
+}

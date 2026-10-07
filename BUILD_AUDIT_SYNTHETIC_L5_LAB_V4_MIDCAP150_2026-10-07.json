@@ -1,0 +1,35 @@
+{
+  "build": "UltraScalp Synthetic L5 Causal Market Lab Midcap150",
+  "date": "2026-10-07",
+  "universe": {
+    "mode": "midcap150",
+    "required_constituents": 150,
+    "fail_closed_if_incomplete": true,
+    "coverage": "deterministic batches; batch 0/1/2 at size 50 covers the full universe"
+  },
+  "market_model": [
+    "30 causal regimes",
+    "five displayed bid/ask levels",
+    "dynamic cancellations and replenishment",
+    "aggressive queue depletion",
+    "deceptive liquidity/spoof-like events",
+    "spread/depth/volume/volatility variation",
+    "cross-sectional market factor",
+    "stock-specific idiosyncratic behaviour",
+    "event and liquidity shocks"
+  ],
+  "evaluation": [
+    "session-separated train/validation/blind test",
+    "validation-only gate tuning",
+    "latency/spread/slippage/adverse-selection economics",
+    "positive remaining net-edge entry gate",
+    "edge-gone/protection/time exits",
+    "explicit no-edge participation check"
+  ],
+  "verification": {
+    "targeted_static_tests": 13,
+    "javascript_blocks_checked": 3,
+    "causal_smoke_passed": true,
+    "production_alpha_changed": false
+  }
+}

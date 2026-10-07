@@ -1,0 +1,61 @@
+{
+  "build": "UltraScalp V12 calibrated probability/risk + stop forensics",
+  "date": "2026-10-08",
+  "dataset": "scalper_l5_snapshots.csv",
+  "dataset_rows": 173633,
+  "dataset_sha256": "048ce93c4854ceda5ca8e52bebe6c4cc4e9edaa8446a5797f3ff302f741bb040",
+  "blind_test": {
+    "split": "chronological 60% train / 40% untouched test",
+    "train_rows": 104179,
+    "test_rows": 69454,
+    "horizon_seconds": 300,
+    "round_trip_cost_pct": 0.1363,
+    "positive_net_floor_pct": 0.005,
+    "gross_target_pct": 0.1413,
+    "protection_pct": 0.22,
+    "min_probability": 0.7,
+    "max_adverse_probability": 0.35,
+    "official_metrics": {
+      "trades": 0
+    },
+    "calibration_positive_rate_min": 0.12182044887780549,
+    "calibration_positive_rate_max": 0.16992893654157837,
+    "calibration_adverse_rate_min": 0.07606933532859458,
+    "calibration_adverse_rate_max": 0.11108340605909488
+  },
+  "diagnostic_lower_threshold": {
+    "note": "Not used to select or tune the official blind result; shown only as a sensitivity check.",
+    "min_probability": 0.15,
+    "metrics": {
+      "trades": 591,
+      "wins": 172,
+      "losses": 419,
+      "win_rate_pct": 29.103214890016922,
+      "avg_net_pct": -0.1501725672171589,
+      "sum_net_pct": -88.75198722534091,
+      "profit_factor": 0.31655921525168007,
+      "avg_winner_pct": 0.23900319560057146,
+      "avg_loser_pct": -0.3099296822640554,
+      "stop_exits": 137,
+      "avg_stop_overshoot_pct": 0.28134634812149967,
+      "max_stop_overshoot_pct": 3.073143782616514
+    }
+  },
+  "pre_fix_same_dataset_reference": {
+    "win_rate_pct": 48.56674856674857,
+    "avg_net_pct": -0.15485931988282725,
+    "sum_net_pct": -378.16645915386414,
+    "profit_factor": 0.3265067464389432,
+    "max_open_positions": 200
+  },
+  "conclusion": "The frozen calibration layer correctly prevents the uncalibrated 0-100 score from being treated as probability. At the requested 70% calibrated probability gate, there are no eligible trades on this real stream. Lowering the gate to 15% does not recover positive edge: PF 0.3166 and mean net -0.1502%. Stop exits also show substantial first-observation overshoot, so the system must record and monitor execution-gap/latency rather than pretending the 0.22% barrier was filled exactly.",
+  "files_changed": [
+    "research/scalper/v12_calibration.py",
+    "research/scalper/ultra_scalper_engine.py",
+    "research/scalper/l5_replay_lab.py",
+    "research/scalper/scalper_live_paper.py",
+    "app.py",
+    "templates/index.html",
+    "tests/test_ultrascalp_v12_calibration.py"
+  ]
+}

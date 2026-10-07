@@ -1,0 +1,13 @@
+{
+  "version": "3.4.32.2",
+  "purpose": "Export inventory preflight NameError fix + fail-soft export inventory + hydration/restart memory hardening",
+  "strategy_definitions_changed": false,
+  "files_sha256": {
+    "RENDER_512MB_SYNTHETIC_TEST_RESULTS.json": "c96229adfd8bf02498f1c7bb1dae9e4f3e152a03ef1c49b17dd91a05605b17ce",
+    "V3.4.32.2_EXPORT_INVENTORY_PREFLIGHT_FIX.md": "e71f8f5502afad18f948859058c9952fdc6227f9d896b4e548f142b4741e0a4d",
+    "app.py": "f2883f1639e40a049ad3227ad6715cd8544798c6d1da0deddcfc79d900598ca2",
+    "historical_export.py": "7d8c379f5fd1052c412a322e9a75f00effbe6239a5d57b9286503cf97ff6b276",
+    "templates/index.html": "e8ba4f9ec92c90aa5a1ec35748ab64029c50747922bbdc68d1a7acc10c8273df",
+    "tests/test_v3_4_32_1_export_inventory_preflight_static.py": "276d46fad9a3b6a66bac52ecfccebd624850fea7ef46227e3ed41cee4f2a358e"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "version": "v3.4.20.3",
+  "release": "Replay phase ETA / segmented UI / research throughput fix",
+  "strategy_sha256": "e444961282d651bb6a3981647a2ad2e71ce37026735c75c95713580b8c05b7e5",
+  "files": {
+    "app.py": "e6380556a413e7e49b7766e2eb2402d6c93b3cf628ebf246db28cfdfe940d989",
+    "templates/index.html": "4d071aa6111946106806241da788dad339da9b5350734f1de1de7581a9e80a05",
+    "strategies.py": "e444961282d651bb6a3981647a2ad2e71ce37026735c75c95713580b8c05b7e5",
+    "V3.4.20.3_REPLAY_PHASE_AND_SEGMENT_FIX.md": "dac6a0d09c61d37aa978b472ac4ce794b932ffac16570afe1a715e093acfe26a"
+  },
+  "tests": {
+    "pytest_targeted": "17 passed",
+    "python_compile": "passed",
+    "template_js_node_check": "passed",
+    "macd_equivalence": "passed"
+  },
+  "ui_contract": {
+    "segmented_replay_display": "parent only; segment X/Y; internal segment ids hidden",
+    "phase_eta": "persisted in database"
+  }
+}

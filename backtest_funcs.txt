@@ -1,0 +1,786 @@
+        if 'regime' in blob or 'risk_off' in blob or 'high volatility' in blob:
+            return 'risky market type'
+        if 'bearish' in blob:
+            return 'bearish broad market'
+        if 'macro' in blob or 'news' in blob:
+            return 'major news/macro risk'
+        if 'pattern' in blob:
+            return 'bad historical pattern'
+        if 'stock' in blob:
+            return 'weak stock-specific history'
+    except Exception:
+        pass
+    return 'strict filter'
+
+
+def bump_count(bucket: Dict[str, int], label: str, by: int = 1) -> None:
+    bucket[label] = int(bucket.get(label) or 0) + by
+
+
+def strategy_memory_signature(market: str, horizon: str) -> str:
+    """Hash of the current learned pattern/regime memory state.
+
+    Included in the fingerprint for 'learned' mode runs so that re-running the
+    exact same window/settings AFTER new learning has accumulated is treated as
+    a fresh, comparable test instead of being silently deduped against an older
+    result computed with a different (or empty) memory state.
+    """
+    memory = get_strategy_memory(market, horizon, regime=None, limit=500)
+    rows = memory.get('patterns') or []
+    normalized = sorted([
+        {
+            'regime': r.get('regime'),
+            'pattern_key': r.get('pattern_key'),
+            'trades': r.get('trades'),
+            'confidence_adjustment': float(r.get('confidence_adjustment') or 0),
+        }
+        for r in rows
+    ], key=lambda x: (str(x['regime']), str(x['pattern_key'])))
+    raw = json.dumps(normalized, sort_keys=True, default=_json_safe, separators=(',', ':'))
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]
+
+
+def backtest_fingerprint_payload(market: str, horizon: str, start_dt: datetime.date, end_dt: datetime.date,
+                                 universe_limit: int, top_n: int, step: int, universe: List[str],
+                                 learning_mode: str = 'raw') -> Dict[str, Any]:
+    """Build the exact evidence signature used for duplicate-learning protection."""
+    payload = {
+        'version': BACKTEST_FINGERPRINT_VERSION,
+        'market': market,
+        'horizon': horizon,
+        'start_date': start_dt.isoformat(),
+        'end_date': end_dt.isoformat(),
+        'universe_limit': int(universe_limit),
+        'top_n': int(top_n),
+        'rebalance_step_days': int(step),
+        'universe': list(universe),
+        'learning_mode': learning_mode,
+        # Only stamped for 'learned' mode: makes a rerun after new learning has
+        # accumulated a genuinely different, non-duplicate fingerprint.
+        'strategy_memory_signature': strategy_memory_signature(market, horizon) if learning_mode == 'learned' else None,
+        'quality_filter': {
+            'enabled': QUALITY_STOCK_FILTER_ENABLED,
+            'thresholds': quality_thresholds_for_market(market),
+            'min_price': QUALITY_MIN_PRICE,
+            'max_zero_volume_days': QUALITY_MAX_ZERO_VOLUME_DAYS,
+            'min_recent_bars': QUALITY_MIN_RECENT_BARS,
+            'min_avg_volume_multiplier': QUALITY_MIN_AVG_VOLUME_MULTIPLIER,
+            'min_turnover_multiplier': QUALITY_MIN_TURNOVER_MULTIPLIER,
+        },
+        'strict_learning': {
+            'enabled': STRICT_LEARNING_ENABLED,
+            'backtest_min_score': STRICT_BACKTEST_MIN_SCORE,
+            'backtest_allow_watch_only': STRICT_BACKTEST_ALLOW_WATCH_ONLY,
+            'backtest_min_risk_reward': STRICT_BACKTEST_MIN_RISK_REWARD,
+            'backtest_min_volume_ratio': STRICT_BACKTEST_MIN_VOLUME_RATIO,
+            'backtest_reject_risk_off': STRICT_BACKTEST_REJECT_RISK_OFF,
+            'pattern_reliable_min_trades': STRICT_PATTERN_RELIABLE_MIN_TRADES,
+            'per_stock_min_trades': STRICT_PER_STOCK_MIN_TRADES,
+        },
+        'execution_costs': {
+            'slippage_bps': EXECUTION_SLIPPAGE_BPS,
+            'spread_bps': EXECUTION_SPREAD_BPS,
+            'fee_bps': EXECUTION_FEE_BPS,
+        },
+        'data_provider': MARKET_DATA_PROVIDER,
+        'price_mode': get_backtest_price_mode_info(),
+        'data_integrity_guard': data_integrity_thresholds(),
+        'exit_aware_learning': backtest_exit_learning_policy(),
+        'ticker_aliases': KNOWN_TICKER_ALIASES,
+    }
+    return payload
+
+
+def backtest_fingerprint_hash(payload: Dict[str, Any]) -> str:
+    raw = json.dumps(payload, sort_keys=True, default=_json_safe, separators=(',', ':'))
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+
+def find_duplicate_backtest_run(fingerprint_hash: str) -> Optional[Dict[str, Any]]:
+    if not fingerprint_hash or not BACKTEST_DUPLICATE_PROTECTION:
+        return None
+    conn = get_db_connection()
+    if conn is None:
+        return None
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, created_at, market, horizon, start_date, end_date, universe_limit, top_n,
+                       rebalance_step_days, total_trades, win_rate_pct, expectancy_pct, max_drawdown_pct,
+                       fingerprint_hash, learning_applied, metrics_json
+                FROM backtest_runs
+                WHERE fingerprint_hash=%s AND status='complete'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (fingerprint_hash,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[WARN] duplicate backtest lookup failed: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def load_backtest_run_payload(run_id: int) -> Dict[str, Any]:
+    """Internal version of the detail endpoint, used for duplicate-cache returns."""
+    conn = get_db_connection()
+    if conn is None:
+        return {'ok': False, 'error': 'DATABASE_URL not set.'}
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, created_at, market, horizon, start_date, end_date, universe_limit, top_n,
+                       rebalance_step_days, total_trades, win_rate_pct, expectancy_pct, avg_trade_pct,
+                       avg_win_pct, avg_loss_pct, profit_factor, sharpe, sortino, max_drawdown_pct,
+                       best_regime, worst_regime, status, error, metrics_json, config_json,
+                       fingerprint_hash, duplicate_of_run_id, learning_applied
+                FROM backtest_runs
+                WHERE id=%s
+            """, (run_id,))
+            run = cur.fetchone()
+            if not run:
+                return {'ok': False, 'error': 'Backtest run not found.'}
+            cur.execute("""
+                SELECT id, ticker, market, horizon, signal_date, entry_date, exit_date, entry_price, exit_price,
+                       target_price, stop_price, raw_return_pct, net_return_pct, outcome, regime, score,
+                       rsi, volume_ratio, atr_pct, failure_reason, lesson_summary, pattern_key, pattern_verdict,
+                       unprotected_exit_price, unprotected_net_return_pct, unprotected_outcome,
+                       protected_exit_price, protected_net_return_pct, protected_outcome, protected_action, protected_reason,
+                       avoided_loss_pct, missed_profit_pct, entry_learning_return_pct, exit_learning_delta_pct, features_json
+                FROM backtest_trades
+                WHERE run_id=%s
+                ORDER BY signal_date DESC, ticker ASC
+                LIMIT 10000
+            """, (run_id,))
+            trades = [dict(r) for r in cur.fetchall()]
+        metrics = run.get('metrics_json') or {}
+        if isinstance(metrics, str):
+            try:
+                metrics = json.loads(metrics)
+            except Exception:
+                metrics = {}
+        run_dict = dict(run)
+        per_stock = aggregate_stock_backtest_rows(trades)
+        prev_run = None
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur2:
+            prev_run = find_previous_same_config_run(cur2, run_dict)
+            if prev_run:
+                cur2.execute("""
+                    SELECT ticker, net_return_pct, outcome, regime, failure_reason, lesson_summary,
+                           pattern_key, pattern_verdict, score, rsi, volume_ratio, atr_pct
+                    FROM backtest_trades WHERE run_id=%s
+                """, (prev_run.get('id'),))
+                prev_trades = [dict(r) for r in cur2.fetchall()]
+                prev_per_stock = {s['ticker']: s for s in aggregate_stock_backtest_rows(prev_trades)}
+                for s in per_stock:
+                    prev_s = prev_per_stock.get(s.get('ticker'))
+                    if prev_s:
+                        s['prev_run_id'] = prev_run.get('id')
+                        s['prev_win_rate_pct'] = prev_s.get('win_rate_pct')
+                        s['prev_expectancy_pct'] = prev_s.get('expectancy_pct')
+                        s['delta_win_rate_pct'] = (round(s.get('win_rate_pct') - prev_s.get('win_rate_pct'), 1)
+                                                   if s.get('win_rate_pct') is not None and prev_s.get('win_rate_pct') is not None else None)
+                        s['delta_expectancy_pct'] = (round(s.get('expectancy_pct') - prev_s.get('expectancy_pct'), 3)
+                                                     if s.get('expectancy_pct') is not None and prev_s.get('expectancy_pct') is not None else None)
+        run_dict['rerun_info'] = _rerun_delta(prev_run, run_dict) if prev_run else {'is_rerun': False}
+        return {
+            'ok': True,
+            'run': run_dict,
+            'metrics': metrics,
+            'trades': trades,
+            'per_stock': per_stock,
+            'plain_note': 'This is the full history of one past backtest run. It shows old simulated trades used for research/learning, not tomorrow’s live picks.'
+        }
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+    finally:
+        conn.close()
+
+
+def get_intraday_backtest_config() -> Dict[str, Any]:
+    """Minute-bar data now comes from INDstocks (IndMoney) via market_data.py, not
+    yfinance -- see indstocks_client.py. INDstocks caps each individual historical
+    call to a 7-day span for minute intervals (MAX_RANGE_DAYS), but market_data.py's
+    get_historical() already walks that window-by-window under the hood, so total
+    depth isn't hard-capped at 7 days the way it would be with a single yfinance call.
+    59 days is kept as a conservative default (not a hard provider limit) so a
+    single backtest run doesn't fire off an excessive number of chained API calls
+    per ticker. Raise it from the Intraday Lab settings if your INDstocks plan
+    serves deeper 5-minute history and you want to test further back."""
+    return {'interval': '5m', 'max_lookback_days': 59}
+
+
+def group_intraday_frame_by_day(h) -> Dict[Any, Any]:
+    """Split one ticker's flat minute-bar DataFrame into per-IST-trading-day frames.
+    Shared by fetch_intraday_bars_for_backtest() (single-ticker path) and the
+    batched fetch in run_intraday_historical_backtest()/run_intraday_replay() so
+    all three group days identically.
+
+    BUG FIX: market_data.py (the INDstocks-backed shim that replaced yfinance)
+    already returns tz-naive timestamps that are IST wall-clock local time (see
+    market_data._candles_to_df, which builds the index from IST_OFFSET directly).
+    This used to tz_localize('UTC') first and then tz_convert to Asia/Kolkata,
+    which added a spurious +5:30 on top of values that were already IST -- e.g. a
+    candle that is really 09:15 IST got relabeled 14:45. Day-bucketing still
+    landed on the correct calendar date (both ends of the trading session shift
+    by the same amount and never cross midnight), but every wall-clock comparison
+    that reads bar timestamps directly -- force-exit-before-close cutoffs,
+    simulated "now" for the replay engine, late-session timing -- was silently
+    off by 5.5 hours. Naive timestamps from this data source are IST already;
+    just label them as such instead of re-deriving IST from a false UTC premise.
+    """
+    if h is None or h.empty:
+        return {}
+    h = normalize_history_frame(h)
+    tz = ZoneInfo('Asia/Kolkata')
+    if h.index.tz is None:
+        h.index = h.index.tz_localize(tz)
+    else:
+        h.index = h.index.tz_convert(tz)
+    return {d: g for d, g in h.groupby(h.index.date)}
+
+
+def fetch_intraday_bars_for_backtest(ticker: str, start_date, end_date, interval: str) -> Dict[Any, Any]:
+    """Fetch minute-bar history for one ticker across [start_date, end_date] and group
+    it by IST trading day. Uses explicit start/end dates (like fetch_daily() above)
+    rather than a relative period=f'{n}d' string -- market_data.py's period parser only
+    recognizes a small fixed set of period strings ('1d','5d','15d','1mo',...); an
+    arbitrary day-count like '43d' silently fell back to a 365-day window anchored at
+    *today*, not at this backtest's own end_date. That mismatch was the root cause of
+    intraday backtests coming back with zero candidates whenever end_date wasn't today:
+    the minute-bar data fetched didn't even cover the calendar days being tested. A few
+    extra days are padded past end_date so the trading day *after* the last signal date
+    is available for next-day trade entry, same reasoning as fetch_daily()'s own padding."""
+    try:
+        h = yf.Ticker(ticker).history(
+            start=start_date.isoformat(),
+            end=(end_date + datetime.timedelta(days=4)).isoformat(),
+            interval=interval, timeout=YF_TIMEOUT,
+        )
+        return group_intraday_frame_by_day(h)
+    except Exception:
+        return {}
+
+
+def build_intraday_backtest_snapshot(ticker: str, day_df, upto_idx: int) -> Dict[str, Any]:
+    """Reconstruct the same snapshot shape fetch_intraday_snapshot() returns live,
+    but from historical minute bars up to (and including) upto_idx within one
+    trading day -- so the backtest exit logic sees exactly what the live snapshot
+    function would have seen at that point in the session."""
+    window = day_df.iloc[:upto_idx + 1]
+    if window.empty:
+        return {'ok': False, 'ticker': ticker}
+    close = window['Close'].dropna()
+    high = window['High'].dropna() if 'High' in window else close
+    low = window['Low'].dropna() if 'Low' in window else close
+    vol = window['Volume'].dropna() if 'Volume' in window else None
+    last = float(close.iloc[-1]) if not close.empty else None
+    open_price = float(window['Open'].dropna().iloc[0]) if 'Open' in window and not window['Open'].dropna().empty else last
+    session_high = float(high.max()) if not high.empty else last
+    session_low = float(low.min()) if not low.empty else last
+    recent_closes = [float(x) for x in close.tail(4).tolist()]
+    recent_trend = 'flat'
+    if len(recent_closes) >= 3:
+        if recent_closes[-1] < recent_closes[-2] < recent_closes[-3]:
+            recent_trend = 'falling'
+        elif recent_closes[-1] > recent_closes[-2] > recent_closes[-3]:
+            recent_trend = 'rising'
+    completed_vol = vol.iloc[:-1] if vol is not None and len(vol) > 1 else vol
+    avg_bar_volume = float(completed_vol.tail(20).mean()) if completed_vol is not None and not completed_vol.empty else None
+    recent_window = vol.tail(3) if vol is not None else None
+    last_bar_volume = float(recent_window.mean()) if recent_window is not None and not recent_window.empty else None
+    vwap = None
+    try:
+        if vol is not None and not vol.empty and float(vol.sum()) > 0:
+            typical = (window['High'] + window['Low'] + window['Close']) / 3
+            vwap = float((typical * window['Volume']).sum() / window['Volume'].sum())
+    except Exception:
+        vwap = None
+    return {
+        'ok': True, 'ticker': ticker, 'last': last, 'open': open_price,
+        'high': session_high, 'low': session_low, 'recent_closes': recent_closes,
+        'recent_trend': recent_trend, 'vwap': vwap,
+        'last_bar_volume': last_bar_volume, 'avg_bar_volume': avg_bar_volume,
+        'bars': int(len(window)),
+    }
+
+
+def simulate_intraday_backtest_trade(ticker: str, day_df, entry_idx: int, candidate: Dict[str, Any],
+                                      intraday_settings: Dict[str, Any], effective_settings: Dict[str, Any],
+                                      market: str, signal_date) -> Optional[Dict[str, Any]]:
+    """Replay one intraday trade against real minute bars using the SAME exit
+    function the live/paper engine uses (evaluate_profit_protection_exit), so a
+    backtest win/loss reflects the real exit logic instead of a separate
+    approximation. Known gap: TIME_DECAY_EXIT and LATE_SESSION_WEAK_HOLD inside
+    that function key off live wall-clock time, so they're effectively inactive
+    when replaying historical timestamps -- every other exit path (target, stop,
+    trailing profit-protect, momentum-fade, quick-profit-book, force-exit-before-close)
+    runs exactly as it does live."""
+    if entry_idx >= len(day_df):
+        return None
+    entry_snap = build_intraday_backtest_snapshot(ticker, day_df, entry_idx)
+    if not entry_snap.get('ok') or not entry_snap.get('last'):
+        return None
+    candidate = dict(candidate)
+    candidate['last'] = entry_snap['last']
+    candidate['vwap'] = entry_snap.get('vwap')
+    candidate['opening_low'] = entry_snap.get('low')
+    candidate['opening_high'] = entry_snap.get('high')
+    candidate = attach_intraday_trade_metrics(candidate, intraday_settings)
+    entry_price = float(candidate.get('entry_price') or 0)
+    stop_price = float(candidate.get('stop_price') or 0)
+    target_price = float(candidate.get('target_price') or 0)
+    if entry_price <= 0 or stop_price <= 0 or target_price <= 0:
+        return None
+    try:
+        position_value = float(intraday_settings.get('min_position_value_inr') or 10000)
+        qty = max(1, int(position_value / entry_price))
+    except Exception:
+        qty = 1
+    pos = {
+        'entry_price': entry_price, 'target_price': target_price, 'stop_price': stop_price,
+        'quantity': qty, 'market': market, 'horizon': 'intraday', 'side': _candidate_side(candidate),
+        'peak_price': entry_price, 'trough_price': entry_price, 'trailing_stop_price': stop_price,
+        'opened_at': None, 'metadata_json': {'profit_book_pct': intraday_settings.get('profit_book_pct')},
+    }
+    force_exit_minutes = int(intraday_settings.get('force_exit_before_close_minutes') or 15)
+    market_close_ts = day_df.index[-1]
+    force_exit_cutoff = market_close_ts - datetime.timedelta(minutes=force_exit_minutes)
+    exit_price, exit_reason, exit_idx = None, None, None
+    for j in range(entry_idx, len(day_df)):
+        snap = build_intraday_backtest_snapshot(ticker, day_df, j)
+        if not snap.get('ok') or not snap.get('last'):
+            continue
+        if day_df.index[j] >= force_exit_cutoff:
+            exit_price, exit_reason, exit_idx = snap['last'], 'INTRADAY_FORCE_EXIT_BEFORE_CLOSE', j
+            break
+        try:
+            reason, meta = evaluate_profit_protection_exit(pos, effective_settings, snap)
+        except Exception:
+            # Defensive fallback: if the live exit function hits an edge case it
+            # doesn't expect from a synthetic backtest pos/snap, fall back to a
+            # plain target/stop check for this bar rather than aborting the trade.
+            reason, meta = None, {'last': snap['last']}
+            side = _candidate_side(candidate)
+            if (side == 'LONG' and snap['last'] >= target_price) or (side == 'SHORT' and snap['last'] <= target_price):
+                reason = 'TARGET_HIT'
+            elif (side == 'LONG' and snap['last'] <= stop_price) or (side == 'SHORT' and snap['last'] >= stop_price):
+                reason = 'STOP_LOSS_HIT'
+        pos['peak_price'] = meta.get('peak', pos['peak_price'])
+        pos['trough_price'] = meta.get('trough', pos['trough_price'])
+        pos['trailing_stop_price'] = meta.get('trailing_stop_price', pos['trailing_stop_price'])
+        if reason:
+            exit_price = meta.get('last') or snap['last']
+            exit_reason, exit_idx = reason, j
+            break
+    if exit_price is None:
+        last_snap = build_intraday_backtest_snapshot(ticker, day_df, len(day_df) - 1)
+        exit_price = last_snap.get('last') or entry_price
+        exit_reason, exit_idx = 'END_OF_DAY_EXIT', len(day_df) - 1
+
+    pnl = calculate_net_trade_pnl(entry_price, exit_price, qty, market, _candidate_side(candidate))
+    raw_return_pct = v3_2_engine.gross_return_pct(entry_price, exit_price, _candidate_side(candidate)) if entry_price else 0
+    net_return_pct = float(pnl.get('net_pnl_pct') if pnl.get('net_pnl_pct') is not None else raw_return_pct)
+    outcome = 'target_hit' if exit_reason == 'TARGET_HIT' else (
+        'stop_loss_hit' if exit_reason in ('STOP_LOSS_HIT', 'TRAILING_STOP_GAVE_BACK_PROFIT') else 'horizon_exit')
+    return {
+        'ticker': ticker, 'signal_date': str(signal_date), 'entry_date': str(day_df.index[entry_idx]),
+        'exit_date': str(day_df.index[exit_idx]) if exit_idx is not None else str(day_df.index[-1]),
+        'entry_price': round(entry_price, 2), 'exit_price': round(float(exit_price), 2),
+        'target_price': round(target_price, 2), 'stop_price': round(stop_price, 2),
+        'raw_return_pct': round(raw_return_pct, 3), 'net_return_pct': round(net_return_pct, 3),
+        'outcome': outcome, 'failure_reason': exit_reason if net_return_pct <= 0 else None,
+        'lesson_summary': f'Exit: {exit_reason}',
+        'regime': (candidate.get('regime_info') or {}).get('regime') if isinstance(candidate.get('regime_info'), dict) else None,
+        'score': candidate.get('final_pre_ai_score'), 'pattern_key': candidate.get('strategy_pattern_key'),
+        'unprotected_exit_price': round(float(exit_price), 2), 'unprotected_net_return_pct': round(net_return_pct, 3), 'unprotected_outcome': outcome,
+        'protected_exit_price': round(float(exit_price), 2), 'protected_net_return_pct': round(net_return_pct, 3), 'protected_outcome': outcome,
+        'protected_action': exit_reason, 'protected_reason': f'Live evaluate_profit_protection_exit result: {exit_reason}',
+        'avoided_loss_pct': 0, 'missed_profit_pct': 0,
+        'entry_learning_return_pct': round(net_return_pct, 3), 'exit_learning_delta_pct': 0,
+    }
+
+
+def run_intraday_historical_backtest(market: str, start_date: Optional[str] = None, end_date: Optional[str] = None,
+                                      universe_limit: Optional[int] = None, top_n: Optional[int] = None,
+                                      commit_learning: bool = False, require_cap_filter: bool = True) -> Dict[str, Any]:
+    """LEGACY ENGINE -- NOT THE PRIMARY BENCHMARK (report: "the legacy backtest is
+    STILL in the application... otherwise you can end up comparing incompatible
+    engines"). This predates the 10-strategy selector and does not have strategy
+    selection, EV-before-selection, strategy-specific stop/target
+    (compute_intraday_risk_plan), the risk-budget allocator, or exit calibration.
+    Kept only for historical/legacy comparison -- use Intraday Replay Lab
+    (start_intraday_replay) to evaluate the current system. See
+    metrics['benchmark_warning'] in this function's return value, surfaced
+    through the API/UI so this distinction isn't only a code comment.
+
+    Real intraday backtest. Same-day hold, real intraday_settings target/stop
+    math, and the actual evaluate_profit_protection_exit() function replayed
+    against real minute bars -- not the swing-style 5-session/daily-bar path that
+    horizon='intraday' used to silently fall into.
+
+    require_cap_filter (default True): PARITY FIX -- this engine used to always
+    scan load_market_universe(market) directly, unfiltered, while Live
+    (get_intraday_scan_universe) and Replay Lab (require_cap_filter, default True)
+    both restrict intraday trading to the Large/Mid-cap allowlist by default. That
+    meant the Backtest Lab could report results for stocks Live/Replay would never
+    have touched. Now it goes through the SAME get_intraday_scan_universe() Live
+    uses, and -- matching Replay Lab's own default -- refuses to run rather than
+    silently widening the universe if the allowlist genuinely isn't available.
+    Pass require_cap_filter=False to explicitly run the full configured universe.
+
+    Known simplifications (documented, not hidden):
+    - Candidate/day selection reuses the existing daily-technical scoring (same
+      scorer as the day/week backtest) as a watchlist filter, since a single day
+      of minute bars alone can't compute multi-day RSI/MACD/trend context.
+    - Minute-bar data comes from INDstocks (IndMoney), not yfinance -- see
+      get_intraday_backtest_config(). The window is still clamped (59 days by
+      default) as a conservative cap on API calls per run, not because the
+      provider hard-stops at that depth.
+    - TIME_DECAY_EXIT and LATE_SESSION_WEAK_HOLD inside the live exit function are
+      wall-clock-dependent and are effectively inactive during replay.
+    """
+    if not BACKTEST_ENABLED:
+        return {'ok': False, 'error': 'Backtesting is disabled by BACKTEST_ENABLED=false'}
+    market, _ = validate_market_horizon(market, 'intraday')
+    cfg = get_intraday_backtest_config()
+    universe_limit = int(universe_limit or BACKTEST_UNIVERSE_LIMIT)
+    top_n = int(top_n or BACKTEST_TOP_N)
+    end_dt = datetime.date.fromisoformat(end_date) if end_date else datetime.date.today()
+    requested_start_dt = datetime.date.fromisoformat(start_date) if start_date else end_dt - datetime.timedelta(days=cfg['max_lookback_days'])
+    earliest_allowed = end_dt - datetime.timedelta(days=cfg['max_lookback_days'])
+    start_dt = max(requested_start_dt, earliest_allowed)
+    clamped = start_dt != requested_start_dt
+
+    cap_filter_applied = False
+    cap_filter_source = None
+    if require_cap_filter:
+        cap_meta = fetch_and_cache_large_mid_cap_allowlist()
+        allowlist = cap_meta.get('symbols')
+        base_market_universe = load_market_universe(market)
+        filtered = apply_cap_allowlist(base_market_universe, allowlist)
+        if filtered is None:
+            no_overlap = bool(allowlist)
+            return {'ok': False, 'error': (
+                (f'Large/Mid-cap universe is required for this run (require_cap_filter=true, the default), and an '
+                 f'allowlist of {len(allowlist)} symbols WAS loaded (source={cap_meta.get("source")}), but NONE of them '
+                 'matched the configured universe even after stripping exchange suffixes -- ticker-format mismatch, not '
+                 'a missing file.') if no_overlap else
+                ('Large/Mid-cap universe is required for this run (require_cap_filter=true, the default) but no '
+                 'allowlist is available right now -- data/large_mid_cap_universe.txt is empty and the '
+                 'auto-download of the NIFTY LargeMidcap 250 constituent list failed. Populate the file '
+                 'or set require_cap_filter=false to explicitly run unfiltered (matches Replay Lab\'s own default behavior).')
+            )}
+        base_universe = filtered
+        cap_filter_applied = True
+        cap_filter_source = cap_meta.get('source')
+    else:
+        base_universe = load_market_universe(market)
+    universe = base_universe[:max(1, universe_limit)]
+    intraday_settings = get_intraday_settings()
+    trading_settings = get_trading_settings()
+    effective_settings = get_intraday_effective_trading_settings(trading_settings, intraday_settings)
+
+    daily_hist: Dict[str, Any] = {}
+
+    # Batched 5-tickers-per-HTTP-call (same pattern fetch_intraday_candidates_batch()
+    # already uses for the live scan) instead of one Ticker.history() call per ticker.
+    # The old per-ticker loop here was issuing 5x more HTTP calls than necessary against
+    # INDstocks' rate limit -- for a 25-ticker universe that's 25 individual daily calls
+    # plus, worse, 25 x ~9 individual 5-minute-window calls below, which is exactly what
+    # was producing the storms of 429 "Rate limit exceeded" failures seen in production.
+    daily_chunks = [universe[i:i + 5] for i in range(0, len(universe), 5)]
+    daily_workers = min(max(1, BACKTEST_MAX_WORKERS), max(1, len(daily_chunks)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=daily_workers) as ex:
+        futures = {
+            ex.submit(yf.history_batch, chunk,
+                      start=(start_dt - datetime.timedelta(days=220)).isoformat(),
+                      end=(end_dt + datetime.timedelta(days=2)).isoformat(),
+                      interval='1d', timeout=YF_TIMEOUT): chunk
+            for chunk in daily_chunks
+        }
+        for fut in concurrent.futures.as_completed(futures):
+            try:
+                for ticker, h in fut.result().items():
+                    if h is not None and not h.empty and len(h) >= BACKTEST_MIN_HISTORY_DAYS + 5:
+                        daily_hist[ticker] = normalize_history_frame(h)
+            except Exception:
+                continue
+    if not daily_hist:
+        return {'ok': False, 'error': 'No daily history available for candidate scoring in selected universe.'}
+
+    minute_universe = [t for t in universe if t in daily_hist]
+    minute_chunks = [minute_universe[i:i + 5] for i in range(0, len(minute_universe), 5)]
+    minute_workers = min(max(1, BACKTEST_MAX_WORKERS), max(1, len(minute_chunks)))
+    intraday_hist: Dict[str, Dict[Any, Any]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=minute_workers) as ex:
+        futures = {
+            ex.submit(yf.history_batch, chunk,
+                      start=start_dt.isoformat(),
+                      end=(end_dt + datetime.timedelta(days=4)).isoformat(),
+                      interval=cfg['interval'], timeout=YF_TIMEOUT): chunk
+            for chunk in minute_chunks
+        }
+        for fut in concurrent.futures.as_completed(futures):
+            try:
+                for ticker, h in fut.result().items():
+                    by_day = group_intraday_frame_by_day(h)
+                    if by_day:
+                        intraday_hist[ticker] = by_day
+            except Exception:
+                continue
+    if not intraday_hist:
+        return {'ok': False, 'error': 'No intraday minute-bar history available (provider may not serve intraday data for this universe/date range).'}
+
+    # Union the trading-day calendar across every ticker we actually got daily
+    # data for, instead of picking one arbitrary ticker's own date list.
+    #
+    # The old code walked daily_hist.values() (order isn't even deterministic --
+    # it's whichever ticker's ThreadPoolExecutor future completed and got
+    # inserted first) and only accepted the FIRST ticker whose own in-range day
+    # count exceeded 10, discarding every other ticker's dates entirely. Two
+    # consequences, both silent:
+    #   1. Any requested window with 10 or fewer trading days (two calendar
+    #      weeks or less) left `calendar` as [] -- the main loop below then
+    #      ran zero iterations and the run reported "no trades" without ever
+    #      checking a single day, indistinguishable from a window that WAS
+    #      checked and genuinely had nothing.
+    #   2. Even for longer windows, whichever ticker happened to win the race
+    #      could have its own gaps (a listing gap, a data-provider hiccup for
+    #      just that scrip) and those gaps silently became gaps in the whole
+    #      run's calendar, even though other tickers had valid data for them.
+    # A union has neither failure mode: any ticker's data can contribute a
+    # trading day, and there's no arbitrary minimum-count gate at all.
+    calendar_dates = set()
+    for h in daily_hist.values():
+        for idx in h.index:
+            d = idx.date()
+            if start_dt <= d <= end_dt:
+                calendar_dates.add(d)
+    calendar = sorted(calendar_dates)
+
+    if not calendar:
+        return {'ok': False,
+                'error': (f'No trading days with daily price history fall between {start_dt.isoformat()} and '
+                          f'{end_dt.isoformat()} for this market/universe, so no day was even attempted '
+                          f'(0 trading days found -- double-check the date range covers actual market days).'),
+                'diagnostics': {'trading_days_in_window': 0, 'universe_size_with_daily_data': len(daily_hist),
+                                 'universe_size_with_minute_data': len(intraday_hist),
+                                 'window_clamped_to_provider_limit': clamped}}
+
+    trades = []
+    started = utc_now_naive()
+    deadline_ts = time.monotonic() + max(8, BACKTEST_MAX_RUNTIME_SECONDS)
+    skipped_no_intraday_data = 0
+    min_score_gate = float(intraday_settings.get('min_score') or 70)
+    max_trades_per_day = int(intraday_settings.get('max_candidates') or top_n)
+
+    # Rejection-reason counters -- purely diagnostic, so that "no trades" can
+    # say WHICH gate actually zeroed things out instead of shrugging with an
+    # "X or Y or Z" error that gives no way to tell which one happened.
+    rejected_insufficient_history = 0
+    rejected_no_snapshot_or_volume = 0
+    rejected_low_liquidity = 0
+    rejected_below_score_gate = 0
+    best_score_seen = None
+    days_checked = 0
+
+    for signal_date in calendar:
+        if time.monotonic() > deadline_ts:
+            break
+        days_checked += 1
+        day_candidates = []
+        for ticker, h in daily_hist.items():
+            try:
+                eligible_idx = [i for i, idx in enumerate(h.index) if idx.date() <= signal_date]
+                if not eligible_idx:
+                    continue
+                idx = eligible_idx[-1]
+                if idx < BACKTEST_MIN_HISTORY_DAYS or idx + 1 >= len(h):
+                    rejected_insufficient_history += 1
+                    continue
+                snap = historical_snapshot_at(ticker, h, idx)
+                if not snap:
+                    rejected_no_snapshot_or_volume += 1
+                    continue
+                snap = score_historical_candidate(snap, market, 'intraday')
+                if snap.get('avg_volume_20', 0) <= 0:
+                    rejected_no_snapshot_or_volume += 1
+                    continue
+                score = float(snap.get('final_pre_ai_score') or 0)
+                best_score_seen = score if best_score_seen is None else max(best_score_seen, score)
+                liq_ok, _ = snapshot_passes_liquidity(snap, market)
+                if not liq_ok:
+                    rejected_low_liquidity += 1
+                    continue
+                if score < min_score_gate:
+                    rejected_below_score_gate += 1
+                    continue
+                day_candidates.append((ticker, idx, snap))
+            except BaseException:
+                rejected_no_snapshot_or_volume += 1
+                continue
+        day_candidates.sort(key=lambda item: item[2].get('final_pre_ai_score', 0), reverse=True)
+
+        entries_today = 0
+        for ticker, idx, snap in day_candidates:
+            if entries_today >= min(top_n, max_trades_per_day):
+                break
+            by_day = intraday_hist.get(ticker) or {}
+            trade_day = next((d for d in sorted(by_day.keys()) if d > signal_date), None)
+            day_bars = by_day.get(trade_day) if trade_day else None
+            if day_bars is None or day_bars.empty:
+                skipped_no_intraday_data += 1
+                continue
+            wait_minutes = int(intraday_settings.get('opening_wait_minutes') or 15)
+            entry_cutoff = day_bars.index[0] + datetime.timedelta(minutes=wait_minutes)
+            entry_candidates_idx = [i for i, ts in enumerate(day_bars.index) if ts >= entry_cutoff]
+            if not entry_candidates_idx:
+                continue
+            trade = simulate_intraday_backtest_trade(ticker, day_bars, entry_candidates_idx[0], snap,
+                                                       intraday_settings, effective_settings, market, signal_date)
+            if trade:
+                trade['market'] = market
+                trade['horizon'] = 'intraday'
+                trades.append(trade)
+                entries_today += 1
+
+    if not trades:
+        deadline_hit = days_checked < len(calendar)
+        gate_breakdown = (
+            f'Checked {days_checked} of {len(calendar)} trading day(s) in range '
+            f'({start_dt.isoformat()} to {end_dt.isoformat()})'
+            + (' -- stopped early after hitting the run-time limit, so the rest of the window was never checked.'
+               if deadline_hit else '.') +
+            f' Across {len(daily_hist)} stock(s) with daily data and {len(intraday_hist)} with 5-minute data: '
+            f'{rejected_insufficient_history} candidate-day(s) lacked enough price history, '
+            f'{rejected_no_snapshot_or_volume} had no usable snapshot/volume data, '
+            f'{rejected_low_liquidity} failed the liquidity filter, and '
+            f'{rejected_below_score_gate} scored below the {min_score_gate:.0f}-point minimum'
+            + (f' (best score seen: {best_score_seen:.1f})' if best_score_seen is not None else '') + '. '
+            + (f'{skipped_no_intraday_data} candidate(s) that DID clear every gate had no matching next-day minute-bar data.'
+               if skipped_no_intraday_data else 'None that cleared the gates were left to check for minute-bar data.')
+        )
+        return {'ok': False,
+                'error': f'No intraday trades could be simulated in this window. {gate_breakdown}',
+                'diagnostics': {
+                    'trading_days_in_window': len(calendar), 'trading_days_checked': days_checked,
+                    'run_time_limit_hit': deadline_hit,
+                    'universe_size_with_daily_data': len(daily_hist), 'universe_size_with_minute_data': len(intraday_hist),
+                    'window_clamped_to_provider_limit': clamped,
+                    'effective_min_score_gate': min_score_gate, 'best_score_seen': best_score_seen,
+                    'rejected_insufficient_history': rejected_insufficient_history,
+                    'rejected_no_snapshot_or_volume': rejected_no_snapshot_or_volume,
+                    'rejected_low_liquidity': rejected_low_liquidity,
+                    'rejected_below_score_gate': rejected_below_score_gate,
+                    'skipped_no_intraday_data': skipped_no_intraday_data,
+                },
+                'skipped_no_intraday_data': skipped_no_intraday_data}
+
+    metrics = compute_backtest_metrics(trades)
+    metrics.update({
+        'start_date': start_dt.isoformat(), 'end_date': end_dt.isoformat(),
+        'universe_size_requested': universe_limit, 'universe_size_with_data': len(intraday_hist),
+        'top_n': top_n, 'data_interval': cfg['interval'],
+        'window_clamped_to_provider_limit': clamped,
+        'window_clamp_note': (f'Intraday runs are capped at {cfg["max_lookback_days"]} days per run (to limit API calls per ticker), so the window was clamped to {start_dt.isoformat()} - {end_dt.isoformat()}.' if clamped else None),
+        'skipped_no_intraday_data': skipped_no_intraday_data,
+        'exit_logic_note': 'Exits replay the live evaluate_profit_protection_exit() function against real minute bars, not a separate backtest-only approximation. TIME_DECAY_EXIT and LATE_SESSION_WEAK_HOLD are wall-clock-dependent live rules and are effectively inactive in this replay.',
+        'learning_mode': 'raw',
+        'cap_filter_applied': cap_filter_applied,
+        'cap_filter_source': cap_filter_source,
+    })
+    fingerprint_payload = backtest_fingerprint_payload(market, 'intraday', start_dt, end_dt, universe_limit, top_n, 1, list(intraday_hist.keys()), learning_mode='raw')
+    fingerprint_hash = backtest_fingerprint_hash(fingerprint_payload)
+    run_id = persist_backtest_result(market, 'intraday', start_dt, end_dt, universe_limit, top_n, 1, trades, metrics, started,
+                                      fingerprint_hash=fingerprint_hash, fingerprint_payload=fingerprint_payload, learning_applied=commit_learning)
+    metrics['commit_learning'] = commit_learning
+    metrics['commit_learning_note'] = (
+        'This run WROTE its results into strategy_signal_stats and will influence future learned-mode runs.'
+        if commit_learning else
+        'This run did NOT write into strategy_signal_stats (research/comparison mode).'
+    )
+    # NOT THE PRIMARY BENCHMARK (report -- "the legacy backtest is STILL in the
+    # application"). This engine does not go through the 10-strategy selector,
+    # the EV-before-selection gate, strategy-specific stop/target, the risk-budget
+    # allocator, or exit calibration -- it's a simpler single-scorer backtest kept
+    # for historical comparison only. Use Intraday Replay Lab
+    # (start_intraday_replay / _run_intraday_replay_worker) as the benchmark for
+    # the current multi-strategy system; comparing this engine's numbers against
+    # Replay Lab's compares two different, incompatible engines.
+    metrics['benchmark_warning'] = (
+        'This is the LEGACY single-scorer intraday backtest, not the current 10-strategy engine. It does not '
+        'use strategy selection, EV-before-selection, strategy-specific stop/target, the risk-budget allocator, '
+        'or exit calibration. Do NOT use this as the primary profitability benchmark for the current system -- '
+        'use Intraday Replay Lab for that. This engine is kept only for historical/legacy comparison.'
+    )
+    metrics['run_id'] = run_id
+    metrics['recent_trades'] = trades[-60:][::-1]
+    metrics['ok'] = True
+    return metrics
+
+
+# =============================================================================
+# INTRADAY REPLAY LAB
+# =============================================================================
+# A controllable historical replay of the *actual live intraday engine*, not a
+# separate/approximate backtest strategy. It reuses, unmodified:
+#   - load_market_universe()                    (same universe as Live/Paper)
+#   - get_intraday_settings()                    (same strategy settings)
+#   - fetch_intraday_candidate_snapshot()         (same scoring math, fed
+#                                                  historical candles instead
+#                                                  of a live quote)
+#   - score_intraday_prescan_candidate()          (same pre-scan ranking)
+#   - attach_intraday_trade_metrics()             (same entry/target/stop math)
+#   - evaluate_profit_protection_exit()           (same exit rules, now
+#                                                  clock-aware via sim_now)
+#
+# Known, documented simplifications (see item list this replaced):
+#   - The universe is the same curated Large/Mid-cap NIFTY-500-style list
+#     load_market_universe() already returns for Live/Paper -- there is no
+#     point-in-time market-cap-on-that-date classification, so a stock that
+#     has since been removed/renamed from the index is filtered by
+#     KNOWN_TICKER_ALIASES only, not by point-in-time index membership.
+#   - Candle-level SL/target conflicts: when both stop and target sit inside
+#     the same 5-minute bar, the conservative adverse-outcome-first rule is
+#     applied (see _resolve_intrabar_conflict below) BEFORE the live exit
+#     function even runs, so replay results are never inflated by assuming
+#     the favorable order.
+INTRADAY_REPLAY_MAX_UNIVERSE = int(os.environ.get('INTRADAY_REPLAY_MAX_UNIVERSE', '0')) or None
+# PRIORITY-2 FIX (Live vs Replay pre-scan pool size mismatch): Replay's
+# pre-scan pool now defaults to the SAME authoritative constant Live uses
+# (INTRADAY_PRE_SCAN_POOL_LIMIT, defined near the top of this file) instead
+# of its own separately-configurable INTRADAY_REPLAY_MAX_UNIVERSE default.
+# INTRADAY_REPLAY_MAX_UNIVERSE, if set, now only acts as an EXTRA hard
+# ceiling on top of that (e.g. for Render memory safety -- see
+# INTRADAY_REPLAY_MEMORY_SAFETY_MB below) -- if it ends up smaller than
+# INTRADAY_PRE_SCAN_POOL_LIMIT, start_intraday_replay() surfaces a loud
+# parity warning rather than silently running a smaller pool than Live.
+INTRADAY_REPLAY_MAX_LOOKBACK_DAYS = int(os.environ.get('INTRADAY_REPLAY_MAX_LOOKBACK_DAYS', '59'))
+INTRADAY_REPLAY_MAX_SELECTED_DAYS = int(os.environ.get('INTRADAY_REPLAY_MAX_SELECTED_DAYS', '15'))
+INTRADAY_REPLAY_EVENT_LOG_LIMIT = int(os.environ.get('INTRADAY_REPLAY_EVENT_LOG_LIMIT', '0'))
+INTRADAY_REPLAY_WARMUP_DAYS = int(os.environ.get('INTRADAY_REPLAY_WARMUP_DAYS', '3'))
+INTRADAY_REPLAY_CAP_ALLOWLIST_PATH = os.environ.get('INTRADAY_REPLAY_CAP_ALLOWLIST_PATH', os.path.join(os.path.dirname(__file__), 'data', 'large_mid_cap_universe.txt'))
+# PRIORITY-2 FIX (Large/Mid universe was silently optional): if the manually
+# maintained local file is empty, auto-download NSE's own published NIFTY
+# LargeMidcap 250 constituent CSV (Large Cap = NIFTY 100 + Mid Cap = NIFTY
+# Midcap 150) and cache it in the DB, refreshed periodically -- see
+# fetch_and_cache_large_mid_cap_allowlist() below. Set to '' to disable
+# auto-download entirely (falls back to file-only / no-filter behavior).
+INTRADAY_REPLAY_CAP_ALLOWLIST_URL = os.environ.get(
+    'INTRADAY_REPLAY_CAP_ALLOWLIST_URL',
+    'https://www.niftyindices.com/IndexConstituent/ind_niftylargemidcap250list.csv',
+)
+INTRADAY_REPLAY_CAP_ALLOWLIST_CACHE_MAX_AGE_DAYS = int(os.environ.get('INTRADAY_REPLAY_CAP_ALLOWLIST_CACHE_MAX_AGE_DAYS', '7'))
+# PRIORITY-1 FIX (review round 2, #3): explicit order-fill timing/realism.
+# 'next_open' (default) is the conservative, non-lookahead-safe fill: a
+# signal detected on bar T is filled at bar T+1's Open (plus slippage), not
+# at bar T's own close/last price -- you cannot actually transact at the
+# exact price that just triggered your own signal. 'signal_price' keeps the
+# old (more optimistic) behavior of filling at the signal candle's own last
+# price, for comparison only.
+INTRADAY_REPLAY_FILL_MODE = os.environ.get('INTRADAY_REPLAY_FILL_MODE', 'next_open').strip().lower()
+INTRADAY_REPLAY_ENTRY_SLIPPAGE_BPS = float(os.environ.get('INTRADAY_REPLAY_ENTRY_SLIPPAGE_BPS', '5'))
+# PRIORITY-2 FIX (Render memory risk): rough pre-flight estimate of how much
+# candle data a run would hold in memory (universe size x trading days x

@@ -1,0 +1,30 @@
+{
+  "release": "v3.4.32.4",
+  "purpose": "Verify multi-day 1-minute Replay is routed to one-day children and does not hit the 3-day memory preflight failure.",
+  "memory_guard": {
+    "universe": 222,
+    "days_3_estimated_mb": 264.8,
+    "days_3_safety_mb": 220.0,
+    "days_3_hard_mb": 360.0,
+    "days_1_estimated_mb": 161.6,
+    "days_1_safe": true
+  },
+  "segmentation": {
+    "batch_222_1m": 1,
+    "batch_250_1m": 1,
+    "five_day_children": 5
+  },
+  "synthetic_rss": {
+    "limit_mb": 512,
+    "peak_mb": 221.6,
+    "status": "PASS"
+  },
+  "targeted_suite": {
+    "tests": 21,
+    "passed": 21,
+    "failed": 0,
+    "status": "PASS"
+  },
+  "compileall": "PASS",
+  "shard_count_python_occurrences": 0
+}

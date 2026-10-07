@@ -1,0 +1,19 @@
+{
+  "release": "UltraScalp Live Paper Capture 2026-10-05",
+  "base_build": "MarketPredictor-Full-Deployable-2026-10-05-ui-fixed",
+  "entry_policy": "frozen synthetic V8 research rules; paper only",
+  "provider": "INDstocks",
+  "documented_depth_levels": 5,
+  "live_websocket": true,
+  "documented_20_200_levels": false,
+  "canonical_event_ofi": false,
+  "python_version": "3.11.9",
+  "root_requirements": true,
+  "files": {
+    "live_worker": "research/scalper/scalper_live_paper.py",
+    "live_engine": "research/scalper/ultra_scalper_engine.py",
+    "live_universe": "data/scalper_live_universe.txt",
+    "schema_notes": "research/scalper/SCALPER_LIVE_SCHEMA.md",
+    "release_notes": "ULTRASCALP_LIVE_PAPER_RELEASE_2026-10-05.md"
+  }
+}

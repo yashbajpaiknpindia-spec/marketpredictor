@@ -1,0 +1,24 @@
+{
+  "build": "MarketPredictor Full Deployable UltraScalp",
+  "date": "2026-10-05",
+  "base_uploaded_archive": "marketpredictor-main (4).zip",
+  "base_app_schema": "3.4.34.x latest uploaded build",
+  "priority_surface": "UltraScalp / Scalper Engine",
+  "bundled_research": true,
+  "bundled_synthetic_evidence": true,
+  "bundled_real_ohlcv_evidence": true,
+  "raw_historical_archive_bundled": false,
+  "deploy_root_requirements": true,
+  "python_version": "3.11.9",
+  "render_build": "pip install -r requirements.txt",
+  "render_start": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --worker-class gthread --timeout 120",
+  "live_trading_default": false,
+  "paper_mode_default": true,
+  "database_blueprint_creates_new_db": false,
+  "validation": {
+    "python_compile": true,
+    "scalper_static_test": true,
+    "template_scalper_markers": true,
+    "archive_integrity": true
+  }
+}

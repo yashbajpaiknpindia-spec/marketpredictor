@@ -1,0 +1,122 @@
+{
+  "name": "UltraScalp V12 validated synthetic benchmark",
+  "status": "research_benchmark_only",
+  "market_model": "synthetic L5-style five-level displayed book",
+  "regimes": [
+    "no_edge",
+    "weak_edge",
+    "bull_trend",
+    "bear_trend",
+    "chop",
+    "reversal",
+    "false_breakout",
+    "spoof_imbalance",
+    "liquidity_shock"
+  ],
+  "stocks_per_regime": 30,
+  "fresh_blind_sessions_per_regime": 3,
+  "stock_session_streams": 810,
+  "bars_per_session": 390,
+  "latency_bars": 1,
+  "round_trip_friction_pct": 0.1363,
+  "validated_net_target_pct": 0.1,
+  "fixed_10_minute_exit": false,
+  "event_driven_exit_policy": [
+    "target",
+    "price_risk_barrier",
+    "profit_lock",
+    "30_minute_safety_timeout"
+  ],
+  "total_completed_trades": 27994,
+  "weighted_avg_net_pct_per_trade": 0.0392,
+  "regime_results": [
+    {
+      "regime": "no_edge",
+      "trades": 0,
+      "win_rate_pct": null,
+      "target_hit_pct": null,
+      "avg_net_pct": 0.0,
+      "profit_factor": null,
+      "avg_hold_minutes": null
+    },
+    {
+      "regime": "weak_edge",
+      "trades": 3521,
+      "win_rate_pct": 41.95,
+      "target_hit_pct": 38.63,
+      "avg_net_pct": -0.124,
+      "profit_factor": 0.35,
+      "avg_hold_minutes": 4.71
+    },
+    {
+      "regime": "bull_trend",
+      "trades": 8266,
+      "win_rate_pct": 81.91,
+      "target_hit_pct": 80.43,
+      "avg_net_pct": 0.1146,
+      "profit_factor": 3.0,
+      "avg_hold_minutes": 3.0
+    },
+    {
+      "regime": "bear_trend",
+      "trades": 8198,
+      "win_rate_pct": 83.34,
+      "target_hit_pct": 81.97,
+      "avg_net_pct": 0.1197,
+      "profit_factor": 3.28,
+      "avg_hold_minutes": 3.12
+    },
+    {
+      "regime": "chop",
+      "trades": 2,
+      "win_rate_pct": 66.67,
+      "target_hit_pct": 66.67,
+      "avg_net_pct": 0.1116,
+      "profit_factor": "INF",
+      "avg_hold_minutes": 4.0
+    },
+    {
+      "regime": "reversal",
+      "trades": 5215,
+      "win_rate_pct": 52.08,
+      "target_hit_pct": 50.6,
+      "avg_net_pct": -0.067,
+      "profit_factor": 0.61,
+      "avg_hold_minutes": 3.25
+    },
+    {
+      "regime": "false_breakout",
+      "trades": 2000,
+      "win_rate_pct": 68.5,
+      "target_hit_pct": 67.4,
+      "avg_net_pct": 0.0363,
+      "profit_factor": 1.36,
+      "avg_hold_minutes": 3.04
+    },
+    {
+      "regime": "spoof_imbalance",
+      "trades": 94,
+      "win_rate_pct": 27.37,
+      "target_hit_pct": 26.32,
+      "avg_net_pct": -0.1916,
+      "profit_factor": 0.17,
+      "avg_hold_minutes": 4.58
+    },
+    {
+      "regime": "liquidity_shock",
+      "trades": 698,
+      "win_rate_pct": 42.84,
+      "target_hit_pct": 41.83,
+      "avg_net_pct": -0.1455,
+      "profit_factor": 0.41,
+      "avg_hold_minutes": 2.22
+    }
+  ],
+  "notes": [
+    "This benchmark validates the V12 event-driven architecture at a +0.10% net research target. The live-paper policy is separate: it now accepts any strictly positive net opportunity after friction, with a +0.005% measurement buffer; this benchmark does not validate that live-paper threshold.",
+    "The fixed 10-minute timeout was not the main source of losses; most positions exited within roughly 2\u20135 minutes.",
+    "The main negative families were weak_edge, reversal, spoof_imbalance and liquidity_shock.",
+    "The discarded 50-stock/+0.135% run is not evidence and is not included here.",
+    "The later clean 30-stock/+0.135% run did not complete, so no result is claimed for that configuration."
+  ]
+}

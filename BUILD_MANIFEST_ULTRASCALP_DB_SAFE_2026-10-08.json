@@ -1,0 +1,12 @@
+{
+  "release": "UltraScalp V12 DB-safe bootstrap + compressed L5 storage",
+  "date": "2026-10-08",
+  "db_policy": "additive-only compatibility migration; old rows untouched",
+  "new_l5_storage": "zlib-json-v1 BYTEA",
+  "v12_model": "v12-direction-edge-v3-economic-lock",
+  "immediate_favorable_trail": true,
+  "targeted_tests_passed": 18,
+  "scalper_ultrascalp_sweep_passed": 55,
+  "python_files_parsed": 113,
+  "release_note": "ULTRASCALP_DB_SAFE_BOOTSTRAP_COMPRESSED_L5_2026-10-08.md"
+}

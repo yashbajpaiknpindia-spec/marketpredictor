@@ -1,0 +1,26 @@
+{
+  "build": "UltraScalp Synthetic L5 Causal Market Lab v3",
+  "date": "2026-10-07",
+  "phase_1": [
+    "30 regime causal market generator",
+    "dynamic five-level book",
+    "cancellation/replenishment/depletion",
+    "deceptive liquidity and event shocks",
+    "cross-market observable context",
+    "explicit no-edge and dead-zone environments"
+  ],
+  "phase_2": [
+    "session-separated train/validation/blind test",
+    "validation-only threshold tuning",
+    "latency/spread/slippage/adverse-selection economics",
+    "positive remaining-edge entry gate",
+    "memory-bounded stock-session processing",
+    "real/synthetic evidence separation"
+  ],
+  "simulation_executed_during_build": false,
+  "static_verification": {
+    "tests": 17,
+    "passed": 17,
+    "scope": "static/scalper regression tests only"
+  }
+}

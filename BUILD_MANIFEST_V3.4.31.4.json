@@ -1,0 +1,18 @@
+{
+  "version": "3.4.31.4",
+  "purpose": "DB bootstrap lifecycle fix plus persistent psycopg2 connection pool; eliminate connect/disconnect churn from 3-second DB status probes",
+  "files": {
+    "app.py": "426b997cabbae6a4b095b2d40ab89b6451c29419c0a5e756fe9e565af4bd3ac6",
+    "templates/index.html": "05d5311ca60885df92edba5619778aaf72f6e0ae426d15091dc326e259a2d286",
+    "README.md": "1e5a147bee4247ae7d53d604c7fb47e2347cd6bdca0659abaf10f798d7c0d793",
+    "V3.4.31.4_RELEASE.md": "260fb6e4c0d0f8dbc973437f2b2ae72cd9f58b474a718925e0d4b71cd8d04b7e",
+    "tests/test_db_pool_local.py": "a0becce6e59a4306e090d65f0bad7ee8b654461f64fc57a39959c2ec4749892c",
+    "tests/test_v3_4_31_2_bootstrap_supervision.py": "5f672e34aa04b1f3c23bb8b96b98ccc5c71b1fea411a8af3edcf274d0ad9e9f2",
+    "tests/test_v3_4_31_3_bootstrap_stale_init_guard.py": "8447ff501a8aa39b99d8175ca87e79070fef803688e3c6c40f14637cc07ddec5",
+    "tests/test_v3_4_31_synthetic_db_worker.py": "377869a11b5a0269baa8de989e4deaa1b7631d621141118cd70b259feeb18e93",
+    "tests/test_v3_4_31_synthetic_db_bootstrap.py": "82ebe6cfa755f96424baed222bf32e767014ec3bcae198758866b70808bbda7c",
+    "gunicorn.conf.py": "3ad6ec34d2b086672d737b04ba27e4f1e565d6033fbe1b4c63b29fbcda49dbd0",
+    "render.yaml": "479486610e8bdc4d64bc2c9091e3a0e6a80a7286077bde9e1eb69229c395212a",
+    "requirements.txt": "6332244e01b23e671020c7e338402921a2f204145ff5ef8a55d3288ccbf660dc"
+  }
+}

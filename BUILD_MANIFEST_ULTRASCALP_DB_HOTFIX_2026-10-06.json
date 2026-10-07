@@ -1,0 +1,16 @@
+{
+  "build": "UltraScalp-L5-250-universe-storage-delete-db-deadlock-hotfix-2026-10-06",
+  "base": "MarketPredictor-UltraScalp-Live-Paper-2026-10-06-L5-250-universe-storage-delete",
+  "fix": "serialize scalper schema self-healing DDL with a PostgreSQL advisory lock and read-only schema contract fast path",
+  "tests": {
+    "targeted_scalper": 22,
+    "targeted_scalper_passed": 22,
+    "targeted_scalper_failed": 0,
+    "python_compile": "passed"
+  },
+  "database_safety": {
+    "preserve_existing_database": true,
+    "destructive_migration": false,
+    "scalper_session_delete": "explicit endpoint only"
+  }
+}

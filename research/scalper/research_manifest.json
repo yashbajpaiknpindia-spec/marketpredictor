@@ -1,0 +1,284 @@
+{
+  "engine": {
+    "name": "MarketPredictor UltraScalp",
+    "version": "research-2026-10-07-synthetic-l5-causal-market-lab-v3",
+    "status": "research_only",
+    "modes": [
+      "OHLCV",
+      "L2-ready"
+    ],
+    "real_data_l2_available": false,
+    "frozen_config": {
+      "target_pct": 0.6,
+      "protection_pct": 0.22,
+      "max_hold_bars": 10,
+      "round_trip_cost_pct": 0.1363,
+      "max_entry_lag_bars": 2,
+      "late_entry_rule": "remaining_edge = expected_move - movement_consumed - friction; reject if too small"
+    },
+    "synthetic_lab": "v3"
+  },
+  "real_archive": {
+    "name": "marketpredictor_historical_1m_2026-06-01_to_2026-09-25",
+    "sessions": 83,
+    "stocks": 226,
+    "rows_approx": 7220000,
+    "resolution": "1m",
+    "coverage": "2026-06-01 to 2026-09-25",
+    "context": [
+      "NIFTY",
+      "INDIA_VIX"
+    ]
+  },
+  "real_tests": [
+    {
+      "name": "25 Sep frozen OHLCV",
+      "sessions": 1,
+      "stocks": 226,
+      "trades": 3252,
+      "win_rate_pct": 17.59,
+      "avg_net_trade_pct": -0.12965,
+      "gross_avg_pct": 0.00944,
+      "target_hits": 96,
+      "stops": 608,
+      "time_exits": 2548,
+      "gross_pf": 1.15,
+      "total_net_pct_points": -421.61
+    },
+    {
+      "name": "25 Sep symmetric corrected",
+      "sessions": 1,
+      "stocks": 226,
+      "trades": 4045,
+      "win_rate_pct": 15.2,
+      "avg_net_trade_pct": -0.14118,
+      "profit_factor": 0.135,
+      "total_net_pct_points": -571.07
+    },
+    {
+      "name": "25 Sep selective OHLCV ranking",
+      "sessions": 1,
+      "stocks": 226,
+      "trades": 191,
+      "win_rate_pct": 12.57,
+      "avg_net_trade_pct": -0.14738,
+      "profit_factor": 0.158,
+      "total_net_pct_points": -28.15
+    },
+    {
+      "name": "25 Sep longer-horizon variant",
+      "sessions": 1,
+      "stocks": 226,
+      "trades": 161,
+      "win_rate_pct": 24.84,
+      "avg_net_trade_pct": -0.14424,
+      "profit_factor": 0.323,
+      "total_net_pct_points": -23.22
+    }
+  ],
+  "public_tests": [
+    {
+      "name": "VWAPMOM",
+      "trades": 4833,
+      "win_rate_pct": 19.553,
+      "target_rate_pct": 16.056,
+      "avg_net_trade_pct": -0.140632
+    },
+    {
+      "name": "MOM",
+      "trades": 5984,
+      "win_rate_pct": 18.717,
+      "target_rate_pct": 14.873,
+      "avg_net_trade_pct": -0.140746
+    },
+    {
+      "name": "ORB15",
+      "trades": 9571,
+      "win_rate_pct": 15.735,
+      "target_rate_pct": 11.253,
+      "avg_net_trade_pct": -0.137439
+    },
+    {
+      "name": "ORB5",
+      "trades": 10952,
+      "win_rate_pct": 15.577,
+      "target_rate_pct": 11.048,
+      "avg_net_trade_pct": -0.13732
+    },
+    {
+      "name": "Public abnormal-demand momentum",
+      "trades": 5888,
+      "win_rate_pct": 24.949,
+      "avg_net_trade_pct": -0.148355
+    },
+    {
+      "name": "Mean reversion / VWAP fade",
+      "trades": 318,
+      "win_rate_pct": 33.333,
+      "avg_net_trade_pct": -0.120187
+    },
+    {
+      "name": "Momentum + NIFTY confirmation",
+      "trades": 300,
+      "win_rate_pct": 26.333,
+      "avg_net_trade_pct": -0.151961
+    }
+  ],
+  "artifacts": [
+    "confirmed_momentum_results.csv",
+    "meanrev_results.csv",
+    "one_session_top20_all.csv",
+    "one_session_v2_2026-09-25_top20.csv",
+    "public_scalp_all_results.csv",
+    "public_scalp_top30.csv",
+    "public_trailing_results.csv",
+    "real_ohclv_rank_search_top100.csv",
+    "real_scalp_A_strict_25sep_trades.csv",
+    "real_scalp_B_balanced_25sep_trades.csv",
+    "real_scalp_improved_B_25sep_trades.csv",
+    "ultra_v3_results.csv",
+    "synthetic_l5_lab_v2_smoke.json",
+    "synthetic_l5_lab_v2_default_verification.json"
+  ],
+  "legacy_synthetic_v8_archive": {
+    "present": true,
+    "evidence_class": "SYNTHETIC_ARCHIVE_LEGACY",
+    "caveat": "Historical controlled-synthetic experiment retained only for reproducibility. It is not the current laboratory and is never combined with real evidence."
+  },
+  "synthetic_lab_v2": {
+    "evidence_class": "SYNTHETIC_L5_CONTROLLED_LAB_V2",
+    "status": "ready_to_run",
+    "regimes_count": 25,
+    "regimes": [
+      "no_edge",
+      "weak_edge",
+      "moderate_edge",
+      "strong_edge",
+      "bull_trend",
+      "bear_trend",
+      "range",
+      "chop",
+      "trend_accel",
+      "trend_decel",
+      "vol_expand",
+      "vol_compress",
+      "reversal",
+      "false_breakout",
+      "spoof_imbalance",
+      "liquidity_shock",
+      "open_shock",
+      "midday_drift",
+      "close_accel",
+      "gap_follow",
+      "gap_fade",
+      "orderflow_flip",
+      "thin_book",
+      "wide_spread",
+      "cross_current"
+    ],
+    "visible_inputs": [
+      "LTP",
+      "volume",
+      "spread",
+      "5 bid levels",
+      "5 ask levels",
+      "derived L5 imbalance",
+      "microprice",
+      "queue/depth changes",
+      "timestamp/session context"
+    ],
+    "hidden_inputs_excluded": [
+      "hidden_state",
+      "hidden_true_flow",
+      "hidden_edge_strength",
+      "future returns",
+      "regime label"
+    ],
+    "execution_model": [
+      "point-in-time decision",
+      "configurable latency 0-3 bars",
+      "spread",
+      "entry slippage",
+      "adverse selection",
+      "round-trip friction"
+    ],
+    "development_protocol": [
+      "whole-session train split",
+      "whole-session validation split",
+      "validation-only gate tuning",
+      "frozen blind test",
+      "per-regime test metrics",
+      "no-edge participation check",
+      "latency robustness 0-3 bars"
+    ],
+    "fixed_target_dependency": false,
+    "negative_result_is_useful": true,
+    "promotion_rule": "Synthetic results never authorize live/paper promotion; TRUE_L5 replay evidence is required."
+  },
+  "synthetic_lab_v3": {
+    "evidence_class": "SYNTHETIC_L5_CAUSAL_MARKET_LAB_V3",
+    "status": "ready_to_run",
+    "regimes_count": 30,
+    "levels": 5,
+    "cross_sectional_stock_streams": true,
+    "event_driven_book_dynamics": true,
+    "observable_context": [
+      "LTP",
+      "volume",
+      "L5 depth",
+      "spread",
+      "NIFTY-like market return",
+      "VIX-like volatility"
+    ],
+    "hidden_state_excluded": true,
+    "train_validation_blind_test": true,
+    "validation_only_threshold_tuning": true,
+    "fixed_target_dependency": false,
+    "real_data_mixed": false,
+    "regimes": [
+      "no_edge",
+      "weak_edge",
+      "moderate_edge",
+      "strong_edge",
+      "bull_trend",
+      "bear_trend",
+      "range",
+      "chop",
+      "trend_accel",
+      "trend_decel",
+      "vol_expand",
+      "vol_compress",
+      "reversal",
+      "false_breakout",
+      "spoof_imbalance",
+      "liquidity_shock",
+      "open_shock",
+      "midday_drift",
+      "close_accel",
+      "gap_follow",
+      "gap_fade",
+      "orderflow_flip",
+      "thin_book",
+      "wide_spread",
+      "cross_current",
+      "news_jump",
+      "shock_recovery",
+      "correlated_selloff",
+      "idiosyncratic_burst",
+      "dead_zone"
+    ]
+  },
+  "v12_live_paper": {
+    "status": "paper_only_candidate",
+    "minimum_net_profit_buffer_pct": 0.005,
+    "round_trip_cost_pct": 0.1363,
+    "gross_hurdle_pct": 0.1413,
+    "objective": "capture any strictly positive net opportunity after round-trip friction; +0.005% is the default measurement buffer, not a ceiling",
+    "entry_latency_bars": 1,
+    "safety_timeout_minutes": 30,
+    "profit_lock": "L5 thesis-weakening after net-positive state",
+    "research_probability_candidate": 0.7,
+    "validated_benchmark_artifact": "artifacts/ultrascalp_v12_validated_benchmark.json",
+    "release_note": "ULTRASCALP_V12_POSITIVE_NET_FLOOR_2026-10-07.md"
+  }
+}

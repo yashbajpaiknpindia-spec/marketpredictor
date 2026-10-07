@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: marketpredictor
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --worker-class gthread --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # Set this to the EXISTING MarketPredictor PostgreSQL connection in Render.
+      # This blueprint intentionally does not create a new database.
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LIVE_TRADING_ENABLED
+        value: "false"
+      - key: AUTO_TRADING_MODE
+        value: paper
+      - key: TRADING_ENABLED
+        value: "false"

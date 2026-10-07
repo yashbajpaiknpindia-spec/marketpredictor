@@ -1,0 +1,32 @@
+{
+  "release": "3.4.30",
+  "name": "MarketPredictor",
+  "title": "DB Schema Bootstrap Fast Path",
+  "files": {
+    "app.py": {
+      "sha256": "ae0bc723ef281a05005c16358ca00686516d0d368119dd9f2be55eb7a6e66815",
+      "bytes": 1532459
+    },
+    "templates/index.html": {
+      "sha256": "6d757b5112cb917f581399f0b1f8d9554faf1f7b1560840b8eda97c733f7e4ab",
+      "bytes": 409275
+    },
+    "V3.4.30_DB_SCHEMA_BOOTSTRAP_FASTPATH.md": {
+      "sha256": "a4dc5877b585eface1a408e7e7ef9256a68aec77a83907d032ea59f44ab0e776",
+      "bytes": 2032
+    },
+    "README.md": {
+      "sha256": "ed569855f4edff8dc19a2d186ab4707434834dffe2db4132151a068efb2290d5",
+      "bytes": 73097
+    },
+    "tests/test_db_schema_batching_static.py": {
+      "sha256": "e43a2e591f8ddb0aab47e56c87e3124998a51f95abdd4543ed0cb2db92b3da53",
+      "bytes": 3464
+    }
+  },
+  "tests": {
+    "runnable_pytest": 71,
+    "portfolio_replay": 8,
+    "export_memory": "not runnable in build container: missing ijson"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": "v3.4.29.1",
+  "release": "startup/loading hotfix for Render DB bootstrap + resilient initial Intraday loading",
+  "required_files": [
+    "app.py",
+    "templates/index.html",
+    "V3.4.28_AI_AGENT_MODE.md",
+    "V3.4.29_UI_UX_AND_SHARED_STORED_DATA_INVENTORY.md",
+    "V3.4.29.1_STARTUP_LOADING_HOTFIX.md",
+    "tests/test_v3_4_28_agent_mode_static.py",
+    "tests/test_v3_4_29_ui_inventory_static.py",
+    "tests/test_v3_4_29_1_startup_hotfix_static.py"
+  ],
+  "sha256": {
+    "app.py": "2cc4e68695728483c41af6e9d729dc587f9d86d549fa52ed00b95e325a5c63f3",
+    "templates/index.html": "6d757b5112cb917f581399f0b1f8d9554faf1f7b1560840b8eda97c733f7e4ab",
+    "V3.4.28_AI_AGENT_MODE.md": "10c03401c962a257b8690080e642c284d1cc4da1726bc4ba5bac5dc14647d049",
+    "V3.4.29_UI_UX_AND_SHARED_STORED_DATA_INVENTORY.md": "f59432e724dffe2556e6404089ec521b5641cef4754e809885d47c17c3afe923",
+    "V3.4.29.1_STARTUP_LOADING_HOTFIX.md": "bbd477229c8562b7de9594dd51a10b5ff590d173126efc99ee2d6cc4b71255bc",
+    "tests/test_v3_4_28_agent_mode_static.py": "bff2ca0223bea1adf2e87ceb5964e1dd199f6dfc4a3270ed279d65c4d1cb5a8e",
+    "tests/test_v3_4_29_ui_inventory_static.py": "1ab48ce28e3b82b20ccb8f8991a0f90e570c9e6ef22b4ebb8b41dc7bbc7b86d2",
+    "tests/test_v3_4_29_1_startup_hotfix_static.py": "637c8b55b3465d2a14bed6028b9d3c733509a1a540fffe4c11ae00ace4ff17de"
+  }
+}

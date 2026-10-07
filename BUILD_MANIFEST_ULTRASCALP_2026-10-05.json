@@ -1,0 +1,32 @@
+{
+  "build_name": "MarketPredictor UltraScalp Research Surface",
+  "build_date": "2026-10-05",
+  "base_source": "uploaded marketpredictor-main (4).zip",
+  "base_app_schema": "3.4.34.16-self-healing-bootstrap",
+  "ui_priority": "UltraScalp / Scalper Engine is first tab",
+  "hidden_navigation": [
+    "AI Copilot",
+    "AI Scanner",
+    "Track Record",
+    "API Costs",
+    "Research Lab",
+    "Trading Automation"
+  ],
+  "eye_control": "inline SVG eye icon with aria-expanded",
+  "research_artifacts_dir": "research/scalper/artifacts",
+  "engine_module": "research/scalper/ultra_scalper_engine.py",
+  "tests": {
+    "targeted_pytest": "20 passed",
+    "python_compile": "passed",
+    "javascript_node_check": "passed"
+  },
+  "sha256": {
+    "app.py": "412a0bea42d576eaba196d1d7f8671069695410f52cb9a2b8e9856c04ebbd97c",
+    "templates/index.html": "4b5a2b85fb17c8da7a1fa31e71009d235ad33618d50941e7b37960f6b1f31516",
+    "research/scalper/ultra_scalper_engine.py": "6846ba0053c2406e4bedafb8b48d4e14dbb9c5efd4ce0e00ad211db25cd4ca79",
+    "research/scalper/research_manifest.json": "cedcc4fe77bac223aad32ad700f626753bde73b4b7ab817946b0256899e533fd",
+    "SCALPER_ENGINE_README.md": "b6e05f6caa7126a19169fa3e096aaec318998d3c34892e793c4ec2e27e986f7d",
+    "tests/test_scalper_research_ui_static.py": "2f512bc2c31c7ee0a821d337c1c1e17beaa953520c0a6df1f5fd020ff1548f39"
+  },
+  "artifact_count": 15
+}
