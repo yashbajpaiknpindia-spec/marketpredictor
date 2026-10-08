@@ -1241,10 +1241,8 @@ def scalper_live_status_endpoint():
             try:
                 if not _ensure_scalper_live_schema(conn):
                     raise RuntimeError('Scalper schema is not ready')
-                try:
-                    _scalper_reap_stale_sessions(conn)
-                except Exception:
-                    conn.rollback()
+                # Status reads must remain read-only; stale-session cleanup is handled by
+                # session lifecycle operations, not every 10-second browser poll.
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     cur.execute("SELECT * FROM scalper_live_sessions ORDER BY id DESC LIMIT 1")
                     row = cur.fetchone()
