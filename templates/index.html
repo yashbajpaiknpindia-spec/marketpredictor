@@ -3075,7 +3075,8 @@ function scalperRenderDepthFeed(d){
     sum.textContent=`0/${lp.total} stocks had usable depth on the last poll · session coverage ${Number(feed.coverage_pct||0).toFixed(1)}% · paper entries are blocked`;
     det.textContent=(feed.verdict||'')+` Provider rows: full ${feed.full_rows??0}, depth ${feed.depth_rows??0}. Last valid L5: ${lastValid}. Use “Test INDstocks now” to see the raw response.`;
   }
-  loadScalperDepthInspector();
+  // Depth inspector refreshes on its own cadence; do not trigger another DB/status
+  // request from every live-paper status render.
 }
 function _scalperFmtTime(v){if(!v)return '—';try{return new Date(v+'Z').toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return String(v).replace('T',' ');}}
 function _scalperParseTimestamp(v){if(!v)return null;let s=String(v).trim();if(!s)return null;if(!/[zZ]|[+-]\\d{2}:?\\d{2}$/.test(s))s+='+05:30';const d=new Date(s);return Number.isFinite(d.getTime())?d:null;}
@@ -3280,7 +3281,7 @@ function switchTab(tab) {
     if (tab === 'research') Promise.resolve(loadResearch()).catch(e => showPageLoaderError('researchView', e));
     if (tab === 'aiCopilot') { Promise.resolve(refreshAICopilotContext()).catch(e => showPageLoaderError('aiCopilotView', e)); Promise.resolve(refreshAgentProposals()).catch(e => console.error(e)); }
     if (tab === 'trading') Promise.resolve(loadTrading()).catch(e => showPageLoaderError('tradingView', e));
-    if (tab === 'scalper') { Promise.resolve(loadScalperResearch()).catch(e => showPageLoaderError('scalperView', e)); Promise.resolve(loadScalperLive()).catch(()=>{}); Promise.resolve(loadScalperScanStatus()).catch(()=>{}); }
+    if (tab === 'scalper') { Promise.resolve(loadScalperResearch()).catch(e => showPageLoaderError('scalperView', e)); Promise.resolve(loadScalperLive()).catch(()=>{}); }
     if (tab === 'intraday') { Promise.resolve(loadIntraday()).catch(e => showPageLoaderError('intradayView', e)); setTimeout(capInitDefaults, 600); }
     if (tab === 'strategyDashboard') Promise.resolve(loadStrategyDashboard()).catch(e => showPageLoaderError('strategyDashboardView', e));
     if (tab === 'intradayReplay') {
@@ -7138,7 +7139,8 @@ irSignalModeChanged();
 pollDatabaseStatus();
 setInterval(pollDatabaseStatus, 15000);
 
-setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperLive(); loadScalperScanStatus(); } }, 10000);
+setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperLive(); } }, 10000);
+setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperScanStatus(); } }, 30000);
 </script>
 </body>
 </html>
