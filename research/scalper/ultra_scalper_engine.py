@@ -286,29 +286,36 @@ def score_event(row: pd.Series, config: ScalperConfig = ScalperConfig(), entry_l
 
 
 def simulate_first_touch(bars: pd.DataFrame, entry_price: float, side: int, config: ScalperConfig = ScalperConfig()) -> Dict[str, Any]:
-    """Simulate one position with first-touch stop/target semantics."""
+    """Simulate the shared V12 economic exit policy without future leakage."""
     if side not in (1, -1):
         return {"exit_reason": "NO_TRADE", "net_pct": 0.0, "gross_pct": 0.0, "bars_held": 0}
     target = entry_price * (1 + side * config.target_pct / 100.0)
     stop = entry_price * (1 - side * config.protection_pct / 100.0)
-    for i, (_, bar) in enumerate(bars.head(config.max_hold_bars).iterrows(), start=1):
+    cost = config.round_trip_cost_pct + config.entry_slippage_pct
+    arm_net = 0.075
+    trail_gross = 0.075
+    peak_gross = 0.0
+    armed = False
+    horizon = bars.head(config.max_hold_bars)
+    for i, (_, bar) in enumerate(horizon.iterrows(), start=1):
         hi, lo = float(bar.high), float(bar.low)
         target_hit = hi >= target if side > 0 else lo <= target
         stop_hit = lo <= stop if side > 0 else hi >= stop
-        if target_hit and stop_hit:
-            # Conservative collision rule: protection is assumed first.
-            gross = -config.protection_pct
-            return _finalize(gross, "STOP_AND_TARGET_SAME_BAR", i, config)
-        if target_hit:
-            gross = config.target_pct
-            return _finalize(gross, "TARGET", i, config)
         if stop_hit:
-            gross = -config.protection_pct
-            return _finalize(gross, "STOP", i, config)
-    last_close = float(bars.head(config.max_hold_bars).iloc[-1].close) if len(bars.head(config.max_hold_bars)) else entry_price
+            return _finalize(-config.protection_pct, "STOP", i, config)
+        if target_hit:
+            return _finalize(config.target_pct, "TARGET", i, config)
+        close = float(bar.close)
+        gross = side * ((close / entry_price) - 1.0) * 100.0
+        net = gross - cost
+        peak_gross = max(peak_gross, gross)
+        if net >= arm_net:
+            armed = True
+        if armed and gross <= peak_gross - trail_gross:
+            return _finalize(gross, "V12_EARLY_PROFIT_LOCK", i, config)
+    last_close = float(horizon.iloc[-1].close) if len(horizon) else entry_price
     gross = side * ((last_close / entry_price) - 1.0) * 100.0
-    return _finalize(gross, "TIME_EXIT", min(config.max_hold_bars, len(bars)), config)
-
+    return _finalize(gross, "TIME_EXIT", min(config.max_hold_bars, len(horizon)), config)
 
 def _finalize(gross_pct: float, reason: str, bars_held: int, config: ScalperConfig) -> Dict[str, Any]:
     net = gross_pct - config.round_trip_cost_pct - config.entry_slippage_pct
