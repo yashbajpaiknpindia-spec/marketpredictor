@@ -55,6 +55,7 @@ import psycopg2.extras
 import psycopg2.pool
 import portfolio_engine
 from research.scalper.scalper_live_paper import LivePaperWorker, SessionHeldElsewhere, extract_depth_levels, DEFAULT_SETTINGS as SCALPER_LIVE_DEFAULTS, _local_now as _scalper_local_now_ist
+from research.r2_archive import R2ArchiveWorker
 
 app = Flask(__name__)
 
@@ -1196,6 +1197,22 @@ def _scalper_autostart_loop() -> None:
 
 
 threading.Thread(target=_scalper_autostart_loop, name='ultrascalp-autostart', daemon=True).start()
+
+# Large raw snapshot/candle data is archived out of PostgreSQL on a 4-hour cadence
+# once the archivable hot-store footprint exceeds the 450 MiB safety trigger.
+# The worker never deletes a source row before an R2 HEAD verification and a
+# VERIFIED manifest record succeed.
+R2_ARCHIVE_WORKER = R2ArchiveWorker(db_connect=get_db_connection, logger=app.logger)
+R2_ARCHIVE_WORKER.start()
+
+@app.get('/api/storage/r2-status')
+def storage_r2_status_endpoint():
+    try:
+        return _scalper_json_response({'ok': True, **R2_ARCHIVE_WORKER.status()})
+    except Exception as exc:
+        app.logger.exception('r2 archive status failed')
+        return _scalper_json_response({'ok': False, 'error': str(exc)[:500]}, 500)
+
 
 
 @app.get('/api/scalper/live/status')
@@ -10774,47 +10791,47 @@ def _load_cached_replay_days(ticker: str, market: str, interval: str, trading_da
 
 def _load_cached_replay_presence(tickers: List[str], market: str, interval: str,
                                   trading_dates: List[datetime.date]) -> Dict[str, set]:
-    """Return only cached ticker/day keys without loading candle JSON into RAM.
-
-    This is the acquisition-path fast lane. Large historical jobs only need to
-    know which cells exist; they do not need to materialize every candle frame
-    before deciding what to download.
-    """
+    """Return cached ticker/day keys from PostgreSQL and verified R2 cold archives."""
     tickers = [str(t).upper() for t in (tickers or []) if t]
     dates = list(dict.fromkeys(trading_dates or []))
     out: Dict[str, set] = {t: set() for t in tickers}
     if not tickers or not dates:
         return out
     conn = get_db_connection()
-    if conn is None:
-        return out
+    if conn is not None:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ticker,trading_date FROM intraday_replay_candle_cache WHERE market=%s AND interval=%s AND ticker=ANY(%s) AND trading_date=ANY(%s)",
+                    (market, interval, tickers, dates),
+                )
+                for ticker, day in cur.fetchall() or []:
+                    t = str(ticker).upper()
+                    if t in out:
+                        out[t].add(day)
+        except Exception as exc:
+            app.logger.warning('[MARKET-DATA] presence-only cache lookup failed: %s', exc)
+        finally:
+            conn.close()
+    # Archived days remain authoritative stored data. Do not route these cells
+    # back to the provider merely because their hot PostgreSQL copy was reclaimed.
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT ticker,trading_date FROM intraday_replay_candle_cache WHERE market=%s AND interval=%s AND ticker=ANY(%s) AND trading_date=ANY(%s)",
-                (market, interval, tickers, dates),
-            )
-            for ticker, day in cur.fetchall() or []:
-                t = str(ticker).upper()
-                if t in out:
-                    out[t].add(day)
+        archived = R2_ARCHIVE_WORKER.store.archived_candle_presence(tickers, market, interval, dates)
+        for ticker, days in archived.items():
+            out.setdefault(ticker, set()).update(days)
+        if str(interval).lower() == '5m':
+            missing_dates = [d for d in dates if any(d not in out.get(t, set()) for t in tickers)]
+            archived_1m = R2_ARCHIVE_WORKER.store.archived_candle_presence(tickers, market, '1m', missing_dates)
+            for ticker, days in archived_1m.items():
+                out.setdefault(ticker, set()).update(days)
     except Exception as exc:
-        app.logger.warning('[MARKET-DATA] presence-only cache lookup failed: %s', exc)
-    finally:
-        conn.close()
+        app.logger.warning('[MARKET-DATA] R2 archived presence lookup skipped: %s', str(exc)[:240])
     return out
 
 
 def _load_cached_replay_matrix(tickers: List[str], market: str, interval: str,
                                trading_dates: List[datetime.date]) -> Dict[str, Dict[datetime.date, Any]]:
-    """Bulk-load the requested ticker/day cache in one DB round trip.
-
-    The old implementation called `_load_cached_replay_days()` once per ticker,
-    which meant hundreds of PostgreSQL connection/cursor cycles before Replay
-    had even decided whether a provider download was necessary. This path keeps
-    the exact same data and ordering while making the cache check bounded by one
-    query for the whole replay matrix.
-    """
+    """Load replay candles from PostgreSQL first, then verified R2 archives for reclaimed cells."""
     tickers = [str(t).upper() for t in (tickers or []) if t]
     dates = list(dict.fromkeys(trading_dates or []))
     out: Dict[str, Dict[datetime.date, Any]] = {t: {} for t in tickers}
@@ -10824,11 +10841,6 @@ def _load_cached_replay_matrix(tickers: List[str], market: str, interval: str,
     if conn is None:
         return out
     try:
-        # Use server-side cursors so PostgreSQL does not materialize the entire JSONB
-        # candle matrix in the web worker before we convert it to DataFrames. This is
-        # critical on Render Free: one 1m day across ~222 symbols can contain hundreds
-        # of thousands of JSON records, and fetchall() briefly held both the raw JSON
-        # and the resulting DataFrames at the same time.
         cursor_name = f"replay_cache_{os.getpid()}_{threading.get_ident()}"
         with conn.cursor(name=cursor_name) as cur:
             cur.itersize = 16
@@ -10846,32 +10858,70 @@ def _load_cached_replay_matrix(tickers: List[str], market: str, interval: str,
                     if t in out:
                         out[t][day] = _cache_records_to_frame(candles)
             if str(interval).lower() == '5m':
-                missing_days=sorted({day for t in tickers for day in dates if day not in out.get(t,{})})
+                missing_days = sorted({day for t in tickers for day in dates if day not in out.get(t, {})})
                 if missing_days:
                     cur_name2 = f"replay_cache_1m_{os.getpid()}_{threading.get_ident()}"
-                    # Close the first named cursor before opening another cursor on the
-                    # same connection; both remain server-side and bounded.
                     cur.close()
                     with conn.cursor(name=cur_name2) as cur2:
                         cur2.itersize = 8
-                        cur2.execute("SELECT ticker, trading_date, candles FROM intraday_replay_candle_cache WHERE market=%s AND interval='1m' AND ticker=ANY(%s) AND trading_date=ANY(%s)", (market,tickers,missing_days))
+                        cur2.execute(
+                            "SELECT ticker, trading_date, candles FROM intraday_replay_candle_cache "
+                            "WHERE market=%s AND interval='1m' AND ticker=ANY(%s) AND trading_date=ANY(%s)",
+                            (market, tickers, missing_days),
+                        )
                         while True:
                             rows2 = cur2.fetchmany(8)
                             if not rows2:
                                 break
                             for ticker, day, candles in rows2:
-                                t=str(ticker).upper()
-                                if t not in out or day in out[t]: continue
-                                frame=_cache_records_to_frame(candles)
-                                if frame is None or frame.empty: continue
-                                five=(frame.sort_index().resample('5min',label='left',closed='left').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna(subset=['Open','High','Low','Close']))
-                                if not five.empty: out[t][day]=five
+                                t = str(ticker).upper()
+                                if t not in out or day in out[t]:
+                                    continue
+                                frame = _cache_records_to_frame(candles)
+                                if frame is None or frame.empty:
+                                    continue
+                                five = (frame.sort_index().resample('5min', label='left', closed='left')
+                                        .agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'})
+                                        .dropna(subset=['Open','High','Low','Close']))
+                                if not five.empty:
+                                    out[t][day] = five
     except Exception as e:
-        print(f"[WARN] bulk replay candle cache read failed: {e}")
+        app.logger.warning("[WARN] bulk replay candle cache read failed: %s", str(e)[:240])
     finally:
         conn.close()
-    return out
 
+    # Cold-cache read-through. Only cells still missing after the DB query are
+    # downloaded from R2, one verified daily object at a time.
+    try:
+        missing_dates = sorted({day for t in tickers for day in dates if day not in out.get(t, {})})
+        if missing_dates:
+            archived = R2_ARCHIVE_WORKER.store.load_archived_candle_rows(tickers, market, interval, missing_dates)
+            for ticker, day_map in archived.items():
+                for day, candles in day_map.items():
+                    if ticker in out and day not in out[ticker]:
+                        frame = _cache_records_to_frame(candles)
+                        if frame is not None and not frame.empty:
+                            out[ticker][day] = frame
+
+        if str(interval).lower() == '5m':
+            missing_dates_1m = sorted({day for t in tickers for day in dates if day not in out.get(t, {})})
+            if missing_dates_1m:
+                archived_1m = R2_ARCHIVE_WORKER.store.load_archived_candle_rows(tickers, market, '1m', missing_dates_1m)
+                for ticker, day_map in archived_1m.items():
+                    for day, candles in day_map.items():
+                        if ticker not in out or day in out[ticker]:
+                            continue
+                        frame = _cache_records_to_frame(candles)
+                        if frame is None or frame.empty:
+                            continue
+                        five = (frame.sort_index().resample('5min', label='left', closed='left')
+                                .agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'})
+                                .dropna(subset=['Open','High','Low','Close']))
+                        if not five.empty:
+                            out[ticker][day] = five
+    except Exception as exc:
+        app.logger.warning('[MARKET-DATA] R2 candle read-through skipped: %s', str(exc)[:300])
+    return out
 
 def _store_cached_replay_days_bulk(rows: List[Tuple[str, str, str, datetime.date, Any]]) -> int:
     """Persist many replay cache rows with a bounded number of DB calls.
