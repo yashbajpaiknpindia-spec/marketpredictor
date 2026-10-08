@@ -503,7 +503,7 @@
 <button type="button" class="tab-btn" id="tabRapidForensics" onclick="switchTab('rapidForensics')">⚡ Rapid Scan</button>
 <button type="button" class="tab-btn" id="tabStrategyDashboard" onclick="switchTab('strategyDashboard')">Strategy Dashboard</button>
 <button type="button" class="tab-btn" id="tabHistory" onclick="switchTab('history')">Trade History</button>
-<button type="button" class="tab-btn" id="tabExport" onclick="switchTab('export')">Export Data</button> <button type="button" class="tab-btn" id="tabImportData" onclick="document.getElementById('appDataImportInput').click()" title="Import a complete application backup">⬆ Import Data</button>
+<button type="button" class="tab-btn" id="tabExport" onclick="switchTab('export')">Export Data</button> <button type="button" class="tab-btn" id="tabImportSession" onclick="document.getElementById('scalperSessionImportInput').click()" title="Import an UltraScalp L5 session additively">⬆ Import Session</button>
 <a class="tab-btn" href="/market-data" style="text-decoration:none;display:inline-flex;align-items:center;">📈 Strategy Evidence</a>
 <a class="tab-btn storage-tab" href="/storage" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" aria-label="Database storage" title="Database storage"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v7c0 1.66 3.13 3 7 3s7-1.34 7-3V5"></path><path d="M5 12v7c0 1.66 3.13 3 7 3s7-1.34 7-3v-7"></path></svg>Storage</a>
 <button type="button" class="tab-btn ai-copilot-tab" id="tabAICopilot" onclick="switchTab('aiCopilot')" style="display:none;">🤖 AI Copilot</button>
@@ -1798,14 +1798,15 @@ Major difference: Trading Automation uses the locked AI day/week scan and then a
 <button class="secondary-btn" onclick="startFullAppDataBackup()">⬇ Build complete backup (ZIP)</button>
 </div>
 <div class="trade-warning" style="margin-top:14px;">
-  <strong>Application data backup</strong> — this is the complete database + managed-file backup/restore. Keep these controls under Export Data; Replay stays focused on historical replay and simulations.
+  <strong>Application backup</strong> — complete backup export remains available for disaster recovery. The visible Import control is <strong>session-only and additive</strong>: it never replaces the database.
 </div>
 <div class="track-actions">
   <button class="secondary-btn" onclick="startFullAppDataBackup()">⬇ Export all application data</button>
-  <button class="secondary-btn" onclick="document.getElementById('appDataImportInput').click()">⬆ Import all application data</button>
-  <input id="appDataImportInput" type="file" accept=".mpbackup.tar.gz,.gz,application/gzip" style="display:none;" onchange="importFullAppData(this.files[0])"/>
+  <button class="secondary-btn" onclick="document.getElementById('scalperSessionImportInput').click()">⬆ Import L5 session data</button>
+  <input id="scalperSessionImportInput" type="file" accept=".csv,.csv.gz,.csv.gzip,.gz,.gzip,text/csv,application/gzip" style="display:none;" onchange="importScalperSessionData(this.files[0])"/>
 </div>
 <div class="cost-note" id="appDataBackupPanel" style="display:none;margin-top:8px;"></div>
+<div class="cost-note" id="scalperSessionImportPanel" style="display:none;margin-top:8px;"></div>
 <div class="cost-note" id="exportNote">The manifest loads from lightweight table metadata first. Summary statistics are fetched separately in the background. The canonical full backup uses the disk-backed asynchronous backup worker. Replay forensics has a separate run-level export.</div>
 <div class="acc-summary" id="exportSummary" style="display:none;">
 <div class="scard"><div class="sval b" id="exportTables">—</div><div class="slbl">Tables included</div></div>
@@ -3097,16 +3098,16 @@ async function loadScalperSessions(){
     const d=await _scalperFetchJson('/api/scalper/live/sessions?limit=20',{cache:'no-store'});
     const rows=d.sessions||[];
     body.innerHTML=rows.length?rows.map(r=>{
-      const status=String(r.status||'').toLowerCase();
-      const canDelete=status!=='running';
-      const date=r.session_date||'—';
-      const id=Number(r.id||0);
+      const status=String(r.status||'').toLowerCase(), canDelete=status!=='running'&&status!=='importing', id=Number(r.id||0);
       const rowsN=Number(r.snapshot_rows||r.stored_snapshot_count||0);
-      const guard=(kind,n)=>n>0?'':' onclick="showToast(\'Session #'+id+'\',\'No '+kind+' rows stored for this session.\',\'error\');return false;"';
-      const actions='<a class="secondary-btn" href="/api/scalper/live/export/snapshots.csv?session_id='+id+'" download'+guard('snapshot',rowsN)+'>Snapshots</a> <a class="secondary-btn" href="/api/scalper/live/export/trades.csv?session_id='+id+'" download>Trades</a> '+(canDelete?('<button class="secondary-btn danger-btn" type="button" onclick="deleteScalperSession('+id+')">🗑 Delete</button>'):('<button class="secondary-btn" type="button" onclick="stopScalperSession('+id+',this)">■ Stop</button>'));
-      return `<tr><td><strong>#${id}</strong><br>${escapeHtml(date)}</td><td>${Number(r.universe_count||0).toLocaleString('en-IN')}</td><td>${Number(r.snapshot_rows||r.stored_snapshot_count||0).toLocaleString('en-IN')}</td><td>${scalperFormatBytes(r.estimated_db_bytes||0)}</td><td>${escapeHtml(r.status||'—')}${status==='running'?(r.live?' · <b>LIVE</b>':' · <i>stale</i>'):''}</td><td>${actions}</td></tr>`;
+      let cfg=r.config_json||{}; if(typeof cfg==='string'){try{cfg=JSON.parse(cfg)}catch(_e){cfg={}}}
+      const period=cfg.label||((r.session_date||'—')+' · '+(r.started_at||'—')+(r.finished_at?' → '+r.finished_at:''));
+      const interval=cfg.capture_interval_label||'interval unknown', duration=cfg.duration_label||'duration unknown';
+      const source=cfg.imported?'Imported · additive':(r.provider||'Live capture');
+      const actions='<a class="secondary-btn" href="/api/scalper/live/export/snapshots.csv?session_id='+id+'" download>Snapshots</a> <a class="secondary-btn" href="/api/scalper/live/export/trades.csv?session_id='+id+'" download>Trades</a> '+(canDelete?'<button class="secondary-btn danger-btn" type="button" onclick="deleteScalperSession('+id+')">🗑 Delete</button>':'<button class="secondary-btn" type="button" disabled>In progress</button>');
+      return '<tr><td><strong>#'+id+'</strong><br><span class="small">'+escapeHtml(period)+'</span><br><span class="small muted">'+escapeHtml(source)+'</span></td><td>'+Number(r.universe_count||0).toLocaleString('en-IN')+'</td><td><strong>'+rowsN.toLocaleString('en-IN')+'</strong><br><span class="small muted">'+escapeHtml(interval)+'</span><br><span class="small muted">'+escapeHtml(duration)+'</span></td><td>'+scalperFormatBytes(r.estimated_db_bytes||0)+'</td><td>'+escapeHtml(r.status||'—')+(status==='running'?(r.live?' · <b>LIVE</b>':' · <i>stale</i>'):'')+'</td><td>'+actions+'</td></tr>';
     }).join(''):'<tr><td colspan="6">No scalper sessions stored.</td></tr>';
-  }catch(e){ body.innerHTML=`<tr><td colspan="6">Could not load session history: ${escapeHtml(e.message||e)}</td></tr>`; }
+  }catch(e){body.innerHTML='<tr><td colspan="6">Could not load session history: '+escapeHtml(e.message||e)+'</td></tr>';}
 }
 async function deleteScalperSession(id){
   if(!confirm(`Delete UltraScalp session #${id}? This permanently removes its stored snapshots and paper trades from the scalper tables. Other MarketPredictor data is not touched.`)) return;
@@ -5003,24 +5004,31 @@ function downloadFullAppDataBackup(jobId) {
   window.location.href='/api/app-data/export/download/'+encodeURIComponent(jobId);
 }
 
-async function importFullAppData(file) {
-  if(!file) return;
-  if(!confirm('This will replace ALL application database data with the selected backup. Active replays must be stopped. Continue?')) { document.getElementById('appDataImportInput').value=''; return; }
-  const panel=document.getElementById('appDataBackupPanel'); if(panel){panel.style.display='block'; panel.textContent='Uploading full backup for validation…';}
-  const fd=new FormData(); fd.append('backup',file,file.name);
-  try {
-    const res=await fetch('/api/app-data/import/start',{method:'POST',body:fd}); const data=await res.json();
-    if(!res.ok||data.ok===false) throw new Error(data.error||'Could not start restore');
-    if(appDataImportPollTimer) clearInterval(appDataImportPollTimer);
+async function importScalperSessionData(file) {
+  if (!file) return;
+  const panel=document.getElementById('scalperSessionImportPanel');
+  if (panel){panel.style.display='block';panel.textContent='Uploading session for validation…';}
+  const fd=new FormData(); fd.append('session',file,file.name);
+  try{
+    const res=await fetch('/api/scalper/live/import/session',{method:'POST',body:fd});
+    const data=await res.json();
+    if(!res.ok||data.ok===false) throw new Error(data.error||'Could not start session import');
+    if(importScalperSessionData._timer) clearInterval(importScalperSessionData._timer);
     const poll=async()=>{
-      const r=await fetch('/api/app-data/import/status/'+encodeURIComponent(data.job_id)); const j=await r.json();
-      if(!r.ok||j.ok===false) throw new Error(j.error||'Restore status failed');
-      renderAppDataJobPanel(j,'import');
-      if(j.status==='completed'||j.status==='error'){clearInterval(appDataImportPollTimer); appDataImportPollTimer=null; loadIntradayReplayRuns();}
+      const rr=await fetch('/api/scalper/live/import/status/'+encodeURIComponent(data.job_id),{cache:'no-store'});
+      const j=await rr.json();
+      if(!rr.ok||j.ok===false) throw new Error(j.error||'Session import status failed');
+      const m=j.metadata||{}, label=j.label||j.source_label||m.label||'Session';
+      if(panel) panel.textContent=(j.stage||j.status||'Importing…')+' · '+label+(j.progress_pct!=null?' · '+Number(j.progress_pct).toFixed(1)+'%':'')+(j.status==='completed'?' · Seen '+Number(j.rows_seen||0).toLocaleString('en-IN')+' · Added '+Number(j.rows_inserted||0).toLocaleString('en-IN')+' · Duplicates skipped '+Number(j.duplicates||0).toLocaleString('en-IN'):'');
+      if(j.status==='completed'||j.status==='error'){
+        clearInterval(importScalperSessionData._timer);importScalperSessionData._timer=null;await loadScalperSessions();
+        showToast('UltraScalp session import',j.message||j.error||'Import finished.',j.status==='completed'?'success':'error');
+      }
     };
-    await poll(); appDataImportPollTimer=setInterval(()=>poll().catch(e=>{clearInterval(appDataImportPollTimer);appDataImportPollTimer=null;renderAppDataJobPanel({status:'error',error:e.message},'import');}),1200);
-  } catch(e) { renderAppDataJobPanel({status:'error',error:e.message},'import'); }
-  document.getElementById('appDataImportInput').value='';
+    await poll();
+    importScalperSessionData._timer=setInterval(()=>poll().catch(e=>{clearInterval(importScalperSessionData._timer);importScalperSessionData._timer=null;if(panel)panel.textContent='Session import failed: '+(e.message||e);}),1000);
+  }catch(e){if(panel){panel.style.display='block';panel.textContent='Session import failed: '+(e.message||e);}showToast('UltraScalp session import',e.message||String(e),'error');}
+  finally{const input=document.getElementById('scalperSessionImportInput');if(input)input.value='';}
 }
 
 async function stopIntradayReplayById(runId) {
