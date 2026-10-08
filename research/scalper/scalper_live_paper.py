@@ -62,6 +62,11 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "v12_model_enabled": True,
     "v12_min_model_expected_edge_pct": 0.0,
     "v12_min_model_target_probability": 0.70,
+    # Frozen positive-edge research gate discovered on real S13/S14.
+    # This is an execution gate only; it does not alter the generic research scorer.
+    "v12_research_gate_enabled": True,
+    "v12_research_max_spread_pct": 0.15,
+    "v12_research_price_lookback": 3,
     "target_pct": 0.60,  # executable gross target after cost/slippage reserve.
     "protection_pct": 0.18,
     "max_hold_minutes": 30,
@@ -419,6 +424,8 @@ class LivePaperWorker:
         self._prev_depth: Dict[str, Dict[str, Any]] = {}
         self._last_prices: Dict[str, float] = {}
         self._last_volumes: Dict[str, float] = {}
+        # Recent real quote prices used by the frozen 3-observation price-confirmation gate.
+        self._price_history: Dict[str, deque] = defaultdict(lambda: deque(maxlen=4))
         self._bars: Dict[str, deque] = defaultdict(lambda: deque(maxlen=25))
         self._current_bar: Dict[str, Dict[str, Any]] = {}
         self._session_vwap_num = 0.0
@@ -584,6 +591,7 @@ class LivePaperWorker:
         self._prev_depth.clear()
         self._last_prices.clear()
         self._last_volumes.clear()
+        self._price_history.clear()
         self._bars.clear()
         self._current_bar.clear()
         self._market_return_history.clear()
@@ -771,6 +779,7 @@ class LivePaperWorker:
             if prev_price and prev_price > 0:
                 current_returns.append((ltp / prev_price - 1.0) * 100.0)
             self._last_prices[symbol] = ltp
+            self._price_history[symbol].append(float(ltp))
             self._last_volumes[symbol] = volume
             self._update_vwap(symbol, depth, ltp, volume)
             self._update_bar(symbol, now, ltp, volume, depth)
@@ -966,7 +975,10 @@ class LivePaperWorker:
             min_signal_score=float(settings.get("min_signal_score", 65.0)),
             require_market_confirmation=True,
             require_relative_strength=True,
-            use_l2_when_available=True,
+            # The real-data edge gate below uses L5 opposition + microprice confirmation
+            # explicitly. Disable the generic combined-L2 veto so it cannot contradict the
+            # discovered research rule (which specifically benefited from L5 opposition).
+            use_l2_when_available=False,
             calibration_profile=settings.get("v12_calibration_profile"),
             require_calibrated_probability=bool(settings.get("v12_require_calibration", False)) if settings.get("v12_mode", True) else False,
             min_calibrated_net_probability=float(settings.get("v12_research_probability_candidate", 0.10)),
@@ -981,7 +993,10 @@ class LivePaperWorker:
         micro_signal = 0.45 * float(features.get("ofi", 0.0)) + 0.35 * float(features.get("imbalance_l5", 0.0)) + 0.20 * float(features.get("microprice_edge", 0.0))
         result["l2_levels"] = 5
         result["l2_mode"] = "displayed_5_level_depth"
-        result["micro_signal"] = micro_signal
+        # For the live edge gate and existing position management, micro_signal is
+        # the directly observed microprice edge, not the legacy weighted L2 blend.
+        result["micro_signal"] = float(features.get("microprice_edge_pct", 0.0) or 0.0)
+        result["l2_pass"] = True
         result["data_honesty"] = "5-level displayed depth; OFI is a proxy, not event-level order-flow imbalance."
         return result
 
@@ -1061,6 +1076,37 @@ class LivePaperWorker:
         self._last_signal_direction[symbol] = current_signal
         if int(result.get("direction") or 0) == 0:
             return False, result.get("rejection_reason") or "no_final_signal"
+
+        # FROZEN POSITIVE-EDGE LIVE ENTRY GATE
+        # Discovered from real S13/S14 research and kept identical to the tested rule:
+        #   signal persists,
+        #   spread <= 0.15%,
+        #   L5 imbalance opposes the signal direction,
+        #   price has continued in the signal direction over the prior 3 observations,
+        #   microprice edge confirms the signal direction.
+        # This is intentionally an entry filter only; exits, capital handling and
+        # existing paper-ledger mechanics remain otherwise unchanged.
+        if bool(settings.get("v12_research_gate_enabled", True)):
+            side = 1 if int(result["direction"]) > 0 else -1
+            max_spread = float(settings.get("v12_research_max_spread_pct", 0.15))
+            spread = float(depth.get("spread_pct") or 0.0)
+            if not math.isfinite(spread) or spread > max_spread:
+                return False, "v12_research_spread"
+            l5 = float(depth.get("imbalance_l5") or 0.0)
+            if not math.isfinite(l5) or side * l5 >= 0.0:
+                return False, "v12_research_l5_opposition"
+            micro_edge = float(depth.get("microprice_edge_pct") or 0.0)
+            if not math.isfinite(micro_edge) or side * micro_edge <= 0.0:
+                return False, "v12_research_microprice"
+            lookback = max(1, int(settings.get("v12_research_price_lookback", 3)))
+            history = list(self._price_history.get(symbol) or [])
+            if len(history) < lookback + 1:
+                return False, "v12_research_price_confirmation_pending"
+            prior = float(history[-(lookback + 1)])
+            current = float(history[-1])
+            if not math.isfinite(prior) or not math.isfinite(current) or side * (current - prior) <= 0.0:
+                return False, "v12_research_price_confirmation"
+
         if settings.get("v12_mode", True) and settings.get("v12_require_calibration", False):
             if result.get("calibration_status") != "calibrated":
                 return False, "calibration_missing"
@@ -1071,11 +1117,11 @@ class LivePaperWorker:
         score = float(result.get("confidence") or 0.0)
         if score < float(settings.get("min_signal_score", 65.0)):
             return False, "score"
-        # Strong L2 agreement is required for the real-data paper version.
+        # The discovered gate uses microprice confirmation directly. Keep that exact
+        # observed value in the trade ledger; the old weighted-L2 agreement veto is removed
+        # because it contradicts the validated L5-opposition entry rule.
         side = 1 if int(result["direction"]) > 0 else -1
-        micro_signal = float(result.get("micro_signal") or 0.0)
-        if micro_signal and np.sign(micro_signal) != np.sign(side):
-            return False, "l2_agreement"
+        micro_signal = float(depth.get("microprice_edge_pct") or 0.0)
         last_entry = self._last_entry_at.get(symbol)
         if last_entry and (now.replace(tzinfo=None) - last_entry).total_seconds() < 30:
             return False, "cooldown"
@@ -1103,9 +1149,8 @@ class LivePaperWorker:
             "remaining_edge_pct": float(result.get("remaining_edge_pct") or 0.0),
             "l2_levels": 5,
             "entry_reason": (
-                "UltraScalp V12 cost-clearing target-first + meaningful-target + hard-loss-gate + 5-level displayed depth"
-                if settings.get("v12_mode", True)
-                else "UltraScalp + economic-target gate + hard-loss-gate + 5-level displayed depth"
+                "V12 frozen positive-edge gate: persistent direction + spread<=0.15% + L5 opposition + "
+                "3-observation price confirmation + microprice confirmation + 5-level displayed depth"
             ),
             "v12_mode": bool(settings.get("v12_mode", True)),
             "v12_target_net_pct": float(settings.get("v12_economic_lock_net_pct", settings.get("target_net_pct", 0.20))),
@@ -1121,6 +1166,14 @@ class LivePaperWorker:
             "v12_entry_latency_bars": int(settings.get("v12_entry_latency_bars", 1)),
             "entry_micro_signal": float(micro_signal),
             "entry_imbalance_l5": float(depth.get("imbalance_l5") or 0.0),
+            "v12_research_gate": {
+                "enabled": bool(settings.get("v12_research_gate_enabled", True)),
+                "max_spread_pct": float(settings.get("v12_research_max_spread_pct", 0.15)),
+                "price_lookback": int(settings.get("v12_research_price_lookback", 3)),
+                "l5_opposition": True,
+                "microprice_confirmation": True,
+                "direction_persistence": True,
+            },
             "v12_calibration_status": result.get("calibration_status"),
             "v12_p_net_positive": result.get("v12_p_net_positive"),
             "v12_p_adverse_stop": result.get("v12_p_adverse_stop"),
