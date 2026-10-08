@@ -24,6 +24,7 @@ import time
 import tempfile
 import uuid
 from decimal import Decimal
+from urllib.parse import urlsplit, urlunsplit
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 try:
@@ -132,12 +133,28 @@ class R2ArchiveStore:
     def prefix(self) -> str:
         return _env("SCALPER_ARCHIVE_PREFIX", default=DEFAULT_PREFIX).strip("/")
 
+    def _endpoint_url(self) -> str:
+        raw = _env("SCALPER_ARCHIVE_ENDPOINT_URL", "R2_ENDPOINT_URL", "CLOUDFLARE_R2_ENDPOINT", "R2_S3_ENDPOINT", "R2_ENDPOINT")
+        if not raw:
+            return ""
+        # Cloudflare's S3 endpoint is account-level. Be tolerant when a bucket
+        # path was appended while the bucket is also supplied separately.
+        try:
+            p = urlsplit(raw.strip())
+            path = (p.path or "").strip("/")
+            bucket = self.bucket.strip()
+            if bucket and path == bucket:
+                return urlunsplit((p.scheme, p.netloc, "", "", ""))
+        except Exception:
+            pass
+        return raw.strip().rstrip("/")
+
     def _client_or_raise(self):
         if boto3 is None:
             raise RuntimeError("boto3 is not installed")
-        endpoint = _env("SCALPER_ARCHIVE_ENDPOINT_URL", "R2_ENDPOINT_URL")
-        access = _env("SCALPER_ARCHIVE_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID")
-        secret = _env("SCALPER_ARCHIVE_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY")
+        endpoint = self._endpoint_url()
+        access = _env("SCALPER_ARCHIVE_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID", "R2_ACCESS_KEY", "AWS_ACCESS_KEY_ID")
+        secret = _env("SCALPER_ARCHIVE_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY", "CLOUDFLARE_R2_SECRET_ACCESS_KEY", "R2_SECRET_KEY", "AWS_SECRET_ACCESS_KEY")
         region = _env("SCALPER_ARCHIVE_REGION", "R2_REGION", default="auto")
         if not endpoint or not self.bucket or not access or not secret:
             raise RuntimeError("R2 archive credentials/configuration are incomplete")
@@ -153,35 +170,49 @@ class R2ArchiveStore:
         return self._client
 
     def verify_connection(self, force: bool = False) -> Dict[str, Any]:
-        endpoint = _env("SCALPER_ARCHIVE_ENDPOINT_URL", "R2_ENDPOINT_URL")
+        endpoint = self._endpoint_url()
+        try:
+            endpoint_host = urlsplit(endpoint).netloc if endpoint else ""
+        except Exception:
+            endpoint_host = ""
         if not self.enabled:
             return {
                 "enabled": False,
                 "configured": False,
                 "connected": False,
                 "bucket": self.bucket or None,
-                "endpoint_host": endpoint.split("//", 1)[-1].split("/", 1)[0] if endpoint else None,
+                "endpoint_host": endpoint_host or None,
                 "error": "R2 archive configuration is incomplete or disabled",
             }
         now = time.monotonic()
         if not force and self._last_verified_at and now - self._last_verified_at < 300:
-            return {"enabled": True, "configured": True, "connected": True, "bucket": self.bucket, "error": None}
+            return {"enabled": True, "configured": True, "connected": True, "bucket": self.bucket, "endpoint_host": endpoint_host, "error": None}
         try:
             client = self._client_or_raise()
+            self._log("[R2_ARCHIVE] verifying endpoint_host=%s bucket=%s", endpoint_host, self.bucket)
             client.head_bucket(Bucket=self.bucket)
             self._last_verified_at = now
             self._last_error = None
-            self._log("[R2_ARCHIVE] connectivity verified bucket=%s threshold_mb=%s interval_hours=%s",
-                      self.bucket, self.threshold_bytes // (1024 * 1024), self.interval_seconds // 3600)
+            self._log("[R2_ARCHIVE] connectivity verified endpoint_host=%s bucket=%s threshold_mb=%s interval_hours=%s",
+                      endpoint_host, self.bucket, self.threshold_bytes // (1024 * 1024), self.interval_seconds // 3600)
             return {
                 "enabled": True, "configured": True, "connected": True,
-                "bucket": self.bucket, "prefix": self.prefix, "threshold_mb": self.threshold_bytes // (1024 * 1024),
+                "bucket": self.bucket, "endpoint_host": endpoint_host, "prefix": self.prefix,
+                "threshold_mb": self.threshold_bytes // (1024 * 1024),
                 "interval_hours": self.interval_seconds // 3600, "error": None,
             }
         except Exception as exc:
+            response = getattr(exc, "response", {}) if exc is not None else {}
+            err = response.get("Error", {}) if isinstance(response, dict) else {}
+            code = str(err.get("Code") or "").strip()
             self._last_error = str(exc)[:400]
-            self._log("[R2_ARCHIVE] connectivity verification failed: %s", self._last_error, error=True)
-            return {"enabled": True, "configured": True, "connected": False, "bucket": self.bucket, "error": self._last_error}
+            self._log("[R2_ARCHIVE] connectivity verification failed endpoint_host=%s bucket=%s code=%s error=%s",
+                      endpoint_host, self.bucket, code or "unknown", self._last_error, error=True)
+            return {
+                "enabled": True, "configured": True, "connected": False,
+                "bucket": self.bucket, "endpoint_host": endpoint_host,
+                "error": self._last_error, "error_code": code or None,
+            }
 
     def _log(self, message: str, *args, error: bool = False):
         try:
