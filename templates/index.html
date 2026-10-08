@@ -3211,7 +3211,6 @@ async function loadScalperLive(){
     if(bannerMeta) bannerMeta.textContent='Status check failed · '+_scalperFmtDateTime(new Date().toISOString());
     showToast('Scalper live status',e.message||String(e),'error');
   }
-  }
   })();
   try{return await _scalperLiveLoadInFlight;}finally{_scalperLiveLoadInFlight=null;}
 }
