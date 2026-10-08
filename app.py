@@ -1300,20 +1300,22 @@ def scalper_live_stop_endpoint():
 _SCALPER_SIZE_STATS_CACHE: Dict[str, Any] = {'at': 0.0, 'value': None}
 _SCALPER_SIZE_STATS_CACHE_TTL = 15.0
 
-def _scalper_relation_size_stats() -> Dict[str, Any]:
-    """Return cheap storage statistics without COUNT(*) over millions of snapshots.
+def _scalper_relation_size_stats(existing_conn=None) -> Dict[str, Any]:
+    """Return cached storage stats without scanning the snapshot table.
 
-    The old estimator performed COUNT(*) on scalper_live_snapshots every few seconds.
-    Once a session contained hundreds of thousands/millions of rows, that turned a
-    harmless UI estimator into a repeated table scan. Session rows already maintain an
-    exact stored_snapshot_count, so use that tiny table for row counts and cache the
-    relation-size measurement briefly.
+    Session rows maintain exact snapshot totals, while pg_total_relation_size()
+    gives the current physical footprint. No COUNT(*)/SUM(payload) over the
+    large snapshot table is performed here.
     """
     now_mono = time.monotonic()
     cached = _SCALPER_SIZE_STATS_CACHE.get('value')
     if cached is not None and now_mono - float(_SCALPER_SIZE_STATS_CACHE.get('at') or 0.0) < _SCALPER_SIZE_STATS_CACHE_TTL:
         return dict(cached)
-    conn = get_db_connection(timeout_seconds=5.0)
+
+    conn = existing_conn
+    owns_connection = conn is None
+    if conn is None:
+        conn = get_db_connection(timeout_seconds=5.0)
     if conn is None:
         return {'ok': False, 'avg_db_bytes_per_snapshot': SCALPER_DEFAULT_ROW_BYTES, 'snapshot_rows': 0, 'relation_bytes': 0, 'source': 'fallback'}
     try:
@@ -1323,17 +1325,22 @@ def _scalper_relation_size_stats() -> Dict[str, Any]:
             cur.execute("""
                 SELECT
                     COALESCE((SELECT SUM(stored_snapshot_count)::BIGINT FROM scalper_live_sessions), 0),
-                    pg_total_relation_size('public.scalper_live_snapshots'),
-                    COALESCE((SELECT COUNT(*) FROM scalper_live_snapshots WHERE depth_payload IS NOT NULL), 0),
-                    COALESCE((SELECT SUM(octet_length(depth_payload)) FROM scalper_live_snapshots WHERE depth_payload IS NOT NULL), 0)
+                    pg_total_relation_size('public.scalper_live_snapshots')
             """)
-            row = cur.fetchone() or (0, 0, 0, 0)
+            row = cur.fetchone() or (0, 0)
             n = int(row[0] or 0)
             total = int(row[1] or 0)
-            compressed_count = int(row[2] or 0)
-            compressed_bytes = int(row[3] or 0)
             avg_b = (total / n) if n else SCALPER_DEFAULT_ROW_BYTES
-            value = {'ok': True, 'avg_db_bytes_per_snapshot': round(avg_b, 2), 'snapshot_rows': n, 'relation_bytes': total, 'compressed_snapshot_count': compressed_count, 'compressed_depth_bytes': compressed_bytes, 'compression_codec': _SCALPER_DEPTH_CODEC, 'source': 'session_totals_plus_pg_total_relation_size'}
+            value = {
+                'ok': True,
+                'avg_db_bytes_per_snapshot': round(avg_b, 2),
+                'snapshot_rows': n,
+                'relation_bytes': total,
+                'compressed_snapshot_count': None,
+                'compressed_depth_bytes': None,
+                'compression_codec': _SCALPER_DEPTH_CODEC,
+                'source': 'session_totals_plus_pg_total_relation_size',
+            }
             _SCALPER_SIZE_STATS_CACHE['at'] = now_mono
             _SCALPER_SIZE_STATS_CACHE['value'] = dict(value)
             return value
@@ -1341,8 +1348,11 @@ def _scalper_relation_size_stats() -> Dict[str, Any]:
         app.logger.warning('scalper relation size estimate failed: %s', exc)
         return {'ok': False, 'avg_db_bytes_per_snapshot': SCALPER_DEFAULT_ROW_BYTES, 'snapshot_rows': 0, 'relation_bytes': 0, 'source': 'fallback', 'error': str(exc)[:180]}
     finally:
-        conn.close()
-
+        if owns_connection:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def _scalper_estimate(universe_limit: int, poll_interval_ms: int, preopen_capture: bool = True) -> Dict[str, Any]:
     requested_n = max(20, min(int(universe_limit or 250), SCALPER_MAX_UNIVERSE))
@@ -1874,7 +1884,7 @@ def scalper_live_sessions_endpoint():
                 ORDER BY s.id DESC LIMIT %s
             """, (limit,))
             rows=[dict(x) for x in cur.fetchall()]
-        size_stats=_scalper_relation_size_stats()
+        size_stats=_scalper_relation_size_stats(existing_conn=conn)
         avg_b=float(size_stats.get('avg_db_bytes_per_snapshot') or SCALPER_DEFAULT_ROW_BYTES)
         for r in rows:
             r['estimated_db_bytes']=int(int(r.get('snapshot_rows') or r.get('stored_snapshot_count') or 0)*avg_b)
