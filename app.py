@@ -1202,13 +1202,42 @@ threading.Thread(target=_scalper_autostart_loop, name='ultrascalp-autostart', da
 # once the archivable hot-store footprint exceeds the 450 MiB safety trigger.
 # The worker never deletes a source row before an R2 HEAD verification and a
 # VERIFIED manifest record succeed.
-R2_ARCHIVE_WORKER = R2ArchiveWorker(db_connect=get_db_connection, logger=app.logger)
-R2_ARCHIVE_WORKER.start()
+#
+# IMPORTANT: app.py defines get_db_connection later during module import. Keep the
+# R2 worker lazy/deferred so a startup-order race cannot crash Gunicorn.
+R2_ARCHIVE_WORKER = None
+R2_ARCHIVE_WORKER_LOCK = threading.Lock()
+
+def _get_r2_archive_worker():
+    global R2_ARCHIVE_WORKER
+    with R2_ARCHIVE_WORKER_LOCK:
+        if R2_ARCHIVE_WORKER is None:
+            R2_ARCHIVE_WORKER = R2ArchiveWorker(db_connect=get_db_connection, logger=app.logger)
+            R2_ARCHIVE_WORKER.start()
+    return R2_ARCHIVE_WORKER
+
+def _r2_archive_deferred_boot():
+    deadline = time.monotonic() + 120.0
+    while time.monotonic() < deadline:
+        try:
+            _get_r2_archive_worker()
+            app.logger.info('[R2_ARCHIVE] scheduler initialized')
+            return
+        except NameError:
+            # get_db_connection is declared later in this module.
+            time.sleep(5.0)
+        except Exception as exc:
+            app.logger.warning('[R2_ARCHIVE] scheduler init deferred: %s', str(exc)[:240])
+            time.sleep(10.0)
+    app.logger.error('[R2_ARCHIVE] scheduler did not initialize within 120 seconds')
+
+threading.Thread(target=_r2_archive_deferred_boot, name='r2-archive-bootstrap', daemon=True).start()
 
 @app.get('/api/storage/r2-status')
 def storage_r2_status_endpoint():
     try:
-        return _scalper_json_response({'ok': True, **R2_ARCHIVE_WORKER.status()})
+        worker = _get_r2_archive_worker()
+        return _scalper_json_response({'ok': True, **worker.status()})
     except Exception as exc:
         app.logger.exception('r2 archive status failed')
         return _scalper_json_response({'ok': False, 'error': str(exc)[:500]}, 500)
@@ -10816,12 +10845,13 @@ def _load_cached_replay_presence(tickers: List[str], market: str, interval: str,
     # Archived days remain authoritative stored data. Do not route these cells
     # back to the provider merely because their hot PostgreSQL copy was reclaimed.
     try:
-        archived = R2_ARCHIVE_WORKER.store.archived_candle_presence(tickers, market, interval, dates)
+        r2_worker = _get_r2_archive_worker()
+        archived = r2_worker.store.archived_candle_presence(tickers, market, interval, dates)
         for ticker, days in archived.items():
             out.setdefault(ticker, set()).update(days)
         if str(interval).lower() == '5m':
             missing_dates = [d for d in dates if any(d not in out.get(t, set()) for t in tickers)]
-            archived_1m = R2_ARCHIVE_WORKER.store.archived_candle_presence(tickers, market, '1m', missing_dates)
+            archived_1m = r2_worker.store.archived_candle_presence(tickers, market, '1m', missing_dates)
             for ticker, days in archived_1m.items():
                 out.setdefault(ticker, set()).update(days)
     except Exception as exc:
@@ -10895,7 +10925,8 @@ def _load_cached_replay_matrix(tickers: List[str], market: str, interval: str,
     try:
         missing_dates = sorted({day for t in tickers for day in dates if day not in out.get(t, {})})
         if missing_dates:
-            archived = R2_ARCHIVE_WORKER.store.load_archived_candle_rows(tickers, market, interval, missing_dates)
+            r2_worker = _get_r2_archive_worker()
+            archived = r2_worker.store.load_archived_candle_rows(tickers, market, interval, missing_dates)
             for ticker, day_map in archived.items():
                 for day, candles in day_map.items():
                     if ticker in out and day not in out[ticker]:
@@ -10906,7 +10937,7 @@ def _load_cached_replay_matrix(tickers: List[str], market: str, interval: str,
         if str(interval).lower() == '5m':
             missing_dates_1m = sorted({day for t in tickers for day in dates if day not in out.get(t, {})})
             if missing_dates_1m:
-                archived_1m = R2_ARCHIVE_WORKER.store.load_archived_candle_rows(tickers, market, '1m', missing_dates_1m)
+                archived_1m = r2_worker.store.load_archived_candle_rows(tickers, market, '1m', missing_dates_1m)
                 for ticker, day_map in archived_1m.items():
                     for day, candles in day_map.items():
                         if ticker not in out or day in out[ticker]:
