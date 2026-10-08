@@ -1504,6 +1504,323 @@ def scalper_live_schema_status_endpoint():
     finally:
         conn.close()
 
+
+SCALPER_SESSION_IMPORT_LOCK = threading.Lock()
+SCALPER_SESSION_IMPORT_JOBS: Dict[str, Dict[str, Any]] = {}
+
+def _scalper_import_job_set(job_id: str, **updates: Any) -> None:
+    with SCALPER_SESSION_IMPORT_LOCK:
+        row = SCALPER_SESSION_IMPORT_JOBS.get(job_id)
+        if row is not None:
+            row.update(updates)
+            row['updated_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+def _scalper_import_job_get(job_id: str) -> Optional[Dict[str, Any]]:
+    with SCALPER_SESSION_IMPORT_LOCK:
+        row = SCALPER_SESSION_IMPORT_JOBS.get(job_id)
+        return dict(row) if row else None
+
+def _scalper_parse_import_ts(value: Any) -> datetime.datetime:
+    raw = str(value or '').strip()
+    if not raw:
+        raise ValueError('Missing captured_at timestamp.')
+    text = raw.replace('Z', '+00:00')
+    try:
+        dt = datetime.datetime.fromisoformat(text)
+    except Exception:
+        dt = datetime.datetime.strptime(raw[:26], '%Y-%m-%d %H:%M:%S.%f') if '.' in raw else datetime.datetime.strptime(raw[:19], '%Y-%m-%d %H:%M:%S')
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(ZoneInfo('Asia/Kolkata')).replace(tzinfo=None)
+    return dt
+
+def _scalper_import_json_list(value: Any) -> list:
+    raw = str(value or '').strip()
+    if not raw:
+        return []
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, list) else []
+    except Exception:
+        return []
+
+def _scalper_import_float(value: Any) -> Optional[float]:
+    try:
+        raw = str(value or '').strip()
+        return None if not raw else float(raw)
+    except Exception:
+        return None
+
+def _scalper_import_int(value: Any) -> Optional[int]:
+    try:
+        raw = str(value or '').strip()
+        return None if not raw else int(float(raw))
+    except Exception:
+        return None
+
+def _scalper_import_bool(value: Any) -> Optional[bool]:
+    raw = str(value or '').strip().casefold()
+    if not raw:
+        return None
+    if raw in ('1','true','t','yes','y'):
+        return True
+    if raw in ('0','false','f','no','n'):
+        return False
+    return None
+
+def _scalper_import_normalize_headers(fieldnames: Iterable[str]) -> Dict[str, str]:
+    return {
+        str(name or '').strip().casefold().replace('-', '_').replace(' ', '_'): str(name)
+        for name in (fieldnames or [])
+    }
+
+def _scalper_import_field(row: Dict[str, Any], aliases: Iterable[str], headers: Dict[str, str], default: Any = None) -> Any:
+    for alias in aliases:
+        key = str(alias).casefold().replace('-', '_').replace(' ', '_')
+        actual = headers.get(key)
+        if actual in row and str(row.get(actual) or '').strip() != '':
+            return row.get(actual)
+    return default
+
+def _scalper_import_record(row: Dict[str, Any], headers: Dict[str, str]) -> tuple:
+    ts = _scalper_parse_import_ts(_scalper_import_field(row, ('captured_at','timestamp','datetime','time','ts'), headers))
+    ticker = str(_scalper_import_field(row, ('ticker','symbol','stock','scrip'), headers, '') or '').strip().upper()
+    if not ticker:
+        raise ValueError('Snapshot row is missing ticker/symbol.')
+    return (
+        ts, ticker,
+        str(_scalper_import_field(row, ('scrip_code','scripcode','instrument_token','token'), headers, '') or '').strip() or None,
+        _scalper_import_float(_scalper_import_field(row, ('ltp','live_price','price','close'), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('volume','qty','quantity'), headers)),
+        json.dumps(_scalper_import_json_list(_scalper_import_field(row, ('bid_prices','bid_prices_json','bids'), headers)), ensure_ascii=False),
+        json.dumps(_scalper_import_json_list(_scalper_import_field(row, ('bid_qtys','bid_quantities','bid_qty'), headers)), ensure_ascii=False),
+        json.dumps(_scalper_import_json_list(_scalper_import_field(row, ('ask_prices','ask_prices_json','asks'), headers)), ensure_ascii=False),
+        json.dumps(_scalper_import_json_list(_scalper_import_field(row, ('ask_qtys','ask_quantities','ask_qty'), headers)), ensure_ascii=False),
+        _scalper_import_float(_scalper_import_field(row, ('spread_pct','spread'), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('imbalance_l1',), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('imbalance_l5','imbalance_l10'), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('microprice',), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('microprice_edge_pct','microprice_edge'), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('ofi_proxy','ofi'), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('book_pressure',), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('depth_total_qty','depth_qty'), headers)),
+        _scalper_import_int(_scalper_import_field(row, ('signal_direction','direction'), headers)),
+        str(_scalper_import_field(row, ('signal_side','side'), headers, '') or '').strip() or None,
+        _scalper_import_float(_scalper_import_field(row, ('signal_confidence','confidence'), headers)),
+        _scalper_import_int(_scalper_import_field(row, ('raw_direction',), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('raw_confidence',), headers)),
+        _scalper_import_bool(_scalper_import_field(row, ('edge_pass',), headers)),
+        _scalper_import_bool(_scalper_import_field(row, ('score_pass',), headers)),
+        _scalper_import_bool(_scalper_import_field(row, ('l2_pass',), headers)),
+        str(_scalper_import_field(row, ('rejection_reason',), headers, '') or '').strip() or None,
+        _scalper_import_float(_scalper_import_field(row, ('expected_move_pct',), headers)),
+        _scalper_import_float(_scalper_import_field(row, ('remaining_edge_pct',), headers)),
+        str(_scalper_import_field(row, ('l2_mode',), headers, '') or '').strip() or None,
+        str(_scalper_import_field(row, ('data_honesty',), headers, '') or '').strip() or None,
+    )
+
+def _scalper_import_interval_summary(delta_samples: List[float]) -> Dict[str, Any]:
+    vals = sorted(float(x) for x in delta_samples if 0.0 < float(x) <= 3600.0)
+    if not vals:
+        return {'median_seconds': None, 'min_seconds': None, 'max_seconds': None, 'label': 'interval unknown'}
+    med = float(np.median(vals))
+    lo, hi = float(vals[0]), float(vals[-1])
+    label = f"{int(round(med))}s interval" if abs(med-round(med)) < 0.05 else f"{med:.2f}s median interval"
+    if hi - lo > 0.5:
+        label += f" · observed {lo:g}–{hi:g}s"
+    return {'median_seconds': round(med,4), 'min_seconds':lo, 'max_seconds':hi, 'label':label}
+
+def _scalper_import_inspect(path: str) -> Dict[str, Any]:
+    import gzip
+    opener = gzip.open if path.lower().endswith(('.gz','.gzip')) else open
+    sha = hashlib.sha256()
+    with open(path, 'rb') as raw:
+        for chunk in iter(lambda: raw.read(1024*1024), b''):
+            sha.update(chunk)
+    row_count = 0; tickers = set(); first_ts = None; last_ts = None; dates = set()
+    last_by_ticker: Dict[str, datetime.datetime] = {}; deltas: List[float] = []
+    with opener(path, 'rt', encoding='utf-8-sig', newline='') as fh:
+        reader = csv.DictReader(fh); headers = _scalper_import_normalize_headers(reader.fieldnames or [])
+        if not any(k in headers for k in ('captured_at','timestamp','datetime','time','ts')):
+            raise ValueError('Import file must contain a captured_at/timestamp column.')
+        if not any(k in headers for k in ('ticker','symbol','stock','scrip')):
+            raise ValueError('Import file must contain a ticker/symbol column.')
+        for row in reader:
+            ts, ticker = _scalper_import_record(row, headers)[:2]
+            row_count += 1; tickers.add(ticker); dates.add(ts.date().isoformat())
+            first_ts = ts if first_ts is None or ts < first_ts else first_ts
+            last_ts = ts if last_ts is None or ts > last_ts else last_ts
+            prev = last_by_ticker.get(ticker)
+            if prev is not None:
+                delta = (ts-prev).total_seconds()
+                if 0 < delta <= 3600 and len(deltas) < 50000:
+                    deltas.append(delta)
+            last_by_ticker[ticker] = ts
+    if not row_count: raise ValueError('The import file contains no snapshot rows.')
+    if len(dates) != 1: raise ValueError('Each imported file must represent exactly one session date. Split multi-day data into separate session files.')
+    interval = _scalper_import_interval_summary(deltas)
+    duration = max(0.0,(last_ts-first_ts).total_seconds()) if first_ts and last_ts else 0.0
+    secs=int(round(duration)); h,rem=divmod(secs,3600); m,s=divmod(rem,60)
+    duration_label=(f"{h}h"+(f" {m}m" if m else "")) if h else ((f"{m}m"+(f" {s}s" if s else "")) if m else f"{s}s")
+    label=f"{first_ts.strftime('%d %b %Y')} · {first_ts.strftime('%H:%M:%S')}–{last_ts.strftime('%H:%M:%S')} IST · {duration_label} · {interval['label']} · {len(tickers)} stocks"
+    return {'sha256':sha.hexdigest(),'row_count':row_count,'tickers':sorted(tickers),'universe_count':len(tickers),'first_ts':first_ts,'last_ts':last_ts,'date':first_ts.date(),'duration_seconds':duration,'duration_label':duration_label,'interval':interval,'label':label}
+
+def _run_scalper_session_import_job(job_id: str, path: str, filename: str) -> None:
+    session_id = None
+    try:
+        _scalper_import_job_set(job_id,status='running',stage='inspecting session',progress_pct=2.0)
+        meta = _scalper_import_inspect(path)
+        conn = get_db_connection(timeout_seconds=30)
+        if conn is None: raise RuntimeError('Database unavailable.')
+        try:
+            _scalper_schema_required(conn)
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM scalper_live_sessions WHERE COALESCE(config_json->>'import_fingerprint','')=%s LIMIT 1",(meta['sha256'],))
+                existing = cur.fetchone()
+            if existing:
+                _scalper_import_job_set(job_id,status='completed',stage='duplicate file — nothing imported',progress_pct=100.0,duplicate=True,duplicate_session_id=int(existing[0]),metadata=meta,label=meta['label'],message='This exact file was already imported. No database rows were added.')
+                return
+            config={'imported':True,'source_filename':filename,'import_fingerprint':meta['sha256'],'source_type':'L5_SNAPSHOT_CSV','capture_interval_seconds':meta['interval'].get('median_seconds'),'capture_interval_label':meta['interval'].get('label'),'duration_seconds':meta['duration_seconds'],'duration_label':meta['duration_label'],'label':meta['label'],'universe_symbols':meta['tickers'],'import_format':'additive_deduplicating_v1'}
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("""INSERT INTO scalper_live_sessions
+                      (session_date,started_at,finished_at,status,provider,depth_levels,universe_count,mapped_count,snapshot_count,stored_snapshot_count,
+                       signal_count,raw_direction_count,edge_pass_count,score_pass_count,l2_agreement_count,entry_reject_count,paper_trade_count,realized_net_pnl_inr,
+                       config_json,result_json,last_heartbeat_at,last_error)
+                      VALUES (%s,%s,%s,'importing','Imported session',5,%s,%s,0,0,0,0,0,0,0,0,0,0,%s,%s,%s,NULL) RETURNING id""",
+                      (meta['date'],meta['first_ts'],meta['last_ts'],meta['universe_count'],meta['universe_count'],json.dumps(config),json.dumps({}),datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)))
+                    session_id=int(cur.fetchone()[0])
+            _scalper_import_job_set(job_id,stage='importing snapshots',progress_pct=3.0,session_id=session_id,metadata=meta,source_label=meta['label'])
+            import gzip
+            opener=gzip.open if path.lower().endswith(('.gz','.gzip')) else open
+            sql_rows=[]; total_seen=inserted_total=duplicate_total=conflict_total=0; last_progress=0.0
+            cols=["captured_at","ticker","scrip_code","ltp","volume","bid_prices","bid_qtys","ask_prices","ask_qtys","spread_pct","imbalance_l1","imbalance_l5","microprice","microprice_edge_pct","ofi_proxy","book_pressure","depth_total_qty","signal_direction","signal_side","signal_confidence","raw_direction","raw_confidence","edge_pass","score_pass","l2_pass","rejection_reason","expected_move_pct","remaining_edge_pct","l2_mode","data_honesty"]
+            with opener(path,'rt',encoding='utf-8-sig',newline='') as fh:
+                reader=csv.DictReader(fh); headers=_scalper_import_normalize_headers(reader.fieldnames or [])
+                with conn.cursor() as cur:
+                    cur.execute("""CREATE TEMP TABLE IF NOT EXISTS _mp_import_snapshots (
+                      captured_at TIMESTAMP NOT NULL,ticker VARCHAR(40) NOT NULL,scrip_code VARCHAR(80),ltp NUMERIC,volume NUMERIC,
+                      bid_prices JSONB,bid_qtys JSONB,ask_prices JSONB,ask_qtys JSONB,spread_pct NUMERIC,imbalance_l1 NUMERIC,imbalance_l5 NUMERIC,
+                      microprice NUMERIC,microprice_edge_pct NUMERIC,ofi_proxy NUMERIC,book_pressure NUMERIC,depth_total_qty NUMERIC,signal_direction SMALLINT,
+                      signal_side VARCHAR(10),signal_confidence NUMERIC,raw_direction SMALLINT,raw_confidence NUMERIC,edge_pass BOOLEAN,score_pass BOOLEAN,l2_pass BOOLEAN,
+                      rejection_reason TEXT,expected_move_pct NUMERIC,remaining_edge_pct NUMERIC,l2_mode VARCHAR(40),data_honesty VARCHAR(200)
+                    ) ON COMMIT PRESERVE ROWS""")
+                    for row in reader:
+                        sql_rows.append(_scalper_import_record(row,headers))
+                        if len(sql_rows) < 2000: continue
+                        cur.execute("TRUNCATE _mp_import_snapshots")
+                        psycopg2.extras.execute_values(cur,"INSERT INTO _mp_import_snapshots VALUES %s",sql_rows,page_size=1000)
+                        cur.execute("""SELECT
+                          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM scalper_live_snapshots s WHERE s.captured_at=t.captured_at AND s.ticker=t.ticker
+                            AND COALESCE(s.ltp,0)=COALESCE(t.ltp,0) AND COALESCE(s.volume,0)=COALESCE(t.volume,0)
+                            AND COALESCE(s.bid_prices,'[]'::jsonb)=COALESCE(t.bid_prices,'[]'::jsonb)
+                            AND COALESCE(s.bid_qtys,'[]'::jsonb)=COALESCE(t.bid_qtys,'[]'::jsonb)
+                            AND COALESCE(s.ask_prices,'[]'::jsonb)=COALESCE(t.ask_prices,'[]'::jsonb)
+                            AND COALESCE(s.ask_qtys,'[]'::jsonb)=COALESCE(t.ask_qtys,'[]'::jsonb))) AS dup_exact,
+                          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM scalper_live_snapshots s WHERE s.captured_at=t.captured_at AND s.ticker=t.ticker)) AS key_exists
+                          FROM _mp_import_snapshots t""")
+                        dup_exact,key_exists=[int(x or 0) for x in cur.fetchone()]; batch_n=len(sql_rows)
+                        cur.execute("""INSERT INTO scalper_live_snapshots
+                          (session_id,captured_at,ticker,scrip_code,ltp,volume,bid_prices,bid_qtys,ask_prices,ask_qtys,spread_pct,imbalance_l1,imbalance_l5,microprice,microprice_edge_pct,ofi_proxy,book_pressure,depth_total_qty,
+                           signal_direction,signal_side,signal_confidence,raw_direction,raw_confidence,edge_pass,score_pass,l2_pass,rejection_reason,expected_move_pct,remaining_edge_pct,l2_mode,data_honesty)
+                          SELECT %s,t.captured_at,t.ticker,t.scrip_code,t.ltp,t.volume,t.bid_prices,t.bid_qtys,t.ask_prices,t.ask_qtys,t.spread_pct,t.imbalance_l1,t.imbalance_l5,t.microprice,t.microprice_edge_pct,t.ofi_proxy,t.book_pressure,t.depth_total_qty,
+                           t.signal_direction,t.signal_side,t.signal_confidence,t.raw_direction,t.raw_confidence,t.edge_pass,t.score_pass,t.l2_pass,t.rejection_reason,t.expected_move_pct,t.remaining_edge_pct,t.l2_mode,t.data_honesty
+                          FROM _mp_import_snapshots t WHERE NOT EXISTS (
+                            SELECT 1 FROM scalper_live_snapshots s WHERE s.captured_at=t.captured_at AND s.ticker=t.ticker
+                              AND COALESCE(s.ltp,0)=COALESCE(t.ltp,0) AND COALESCE(s.volume,0)=COALESCE(t.volume,0)
+                              AND COALESCE(s.bid_prices,'[]'::jsonb)=COALESCE(t.bid_prices,'[]'::jsonb)
+                              AND COALESCE(s.bid_qtys,'[]'::jsonb)=COALESCE(t.bid_qtys,'[]'::jsonb)
+                              AND COALESCE(s.ask_prices,'[]'::jsonb)=COALESCE(t.ask_prices,'[]'::jsonb)
+                              AND COALESCE(s.ask_qtys,'[]'::jsonb)=COALESCE(t.ask_qtys,'[]'::jsonb))""",(session_id,))
+                        inserted=int(cur.rowcount or 0); dup=min(dup_exact,batch_n); conflicts=max(0,key_exists-dup)
+                        total_seen+=batch_n; inserted_total+=inserted; duplicate_total+=dup; conflict_total+=conflicts; conn.commit(); sql_rows=[]
+                        pct=3.0+92.0*min(1.0,total_seen/max(meta['row_count'],1))
+                        if pct-last_progress>=1.0:
+                            _scalper_import_job_set(job_id,progress_pct=round(pct,1),rows_seen=total_seen,rows_inserted=inserted_total,duplicates=duplicate_total,conflicts=conflict_total)
+                            last_progress=pct
+                    if sql_rows:
+                        cur.execute("TRUNCATE _mp_import_snapshots"); psycopg2.extras.execute_values(cur,"INSERT INTO _mp_import_snapshots VALUES %s",sql_rows,page_size=1000)
+                        cur.execute("""SELECT
+                          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM scalper_live_snapshots s WHERE s.captured_at=t.captured_at AND s.ticker=t.ticker
+                            AND COALESCE(s.ltp,0)=COALESCE(t.ltp,0) AND COALESCE(s.volume,0)=COALESCE(t.volume,0)
+                            AND COALESCE(s.bid_prices,'[]'::jsonb)=COALESCE(t.bid_prices,'[]'::jsonb)
+                            AND COALESCE(s.bid_qtys,'[]'::jsonb)=COALESCE(t.bid_qtys,'[]'::jsonb)
+                            AND COALESCE(s.ask_prices,'[]'::jsonb)=COALESCE(t.ask_prices,'[]'::jsonb)
+                            AND COALESCE(s.ask_qtys,'[]'::jsonb)=COALESCE(t.ask_qtys,'[]'::jsonb))),
+                          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM scalper_live_snapshots s WHERE s.captured_at=t.captured_at AND s.ticker=t.ticker))
+                          FROM _mp_import_snapshots t""")
+                        dup_exact,key_exists=[int(x or 0) for x in cur.fetchone()]; batch_n=len(sql_rows)
+                        cur.execute("""INSERT INTO scalper_live_snapshots
+                          (session_id,captured_at,ticker,scrip_code,ltp,volume,bid_prices,bid_qtys,ask_prices,ask_qtys,spread_pct,imbalance_l1,imbalance_l5,microprice,microprice_edge_pct,ofi_proxy,book_pressure,depth_total_qty,signal_direction,signal_side,signal_confidence,raw_direction,raw_confidence,edge_pass,score_pass,l2_pass,rejection_reason,expected_move_pct,remaining_edge_pct,l2_mode,data_honesty)
+                          SELECT %s,t.captured_at,t.ticker,t.scrip_code,t.ltp,t.volume,t.bid_prices,t.bid_qtys,t.ask_prices,t.ask_qtys,t.spread_pct,t.imbalance_l1,t.imbalance_l5,t.microprice,t.microprice_edge_pct,t.ofi_proxy,t.book_pressure,t.depth_total_qty,t.signal_direction,t.signal_side,t.signal_confidence,t.raw_direction,t.raw_confidence,t.edge_pass,t.score_pass,t.l2_pass,t.rejection_reason,t.expected_move_pct,t.remaining_edge_pct,t.l2_mode,t.data_honesty
+                          FROM _mp_import_snapshots t WHERE NOT EXISTS (
+                            SELECT 1 FROM scalper_live_snapshots s WHERE s.captured_at=t.captured_at AND s.ticker=t.ticker
+                              AND COALESCE(s.ltp,0)=COALESCE(t.ltp,0) AND COALESCE(s.volume,0)=COALESCE(t.volume,0)
+                              AND COALESCE(s.bid_prices,'[]'::jsonb)=COALESCE(t.bid_prices,'[]'::jsonb)
+                              AND COALESCE(s.bid_qtys,'[]'::jsonb)=COALESCE(t.bid_qtys,'[]'::jsonb)
+                              AND COALESCE(s.ask_prices,'[]'::jsonb)=COALESCE(t.ask_prices,'[]'::jsonb)
+                              AND COALESCE(s.ask_qtys,'[]'::jsonb)=COALESCE(t.ask_qtys,'[]'::jsonb))""",(session_id,))
+                        inserted_total+=int(cur.rowcount or 0); duplicate_total+=int(min(dup_exact,batch_n)); conflict_total+=max(0,int(key_exists)-int(dup_exact)); total_seen+=batch_n; conn.commit()
+            result={**meta,'rows_seen':total_seen,'rows_inserted':inserted_total,'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total,'dedupe_rule':'captured_at + ticker + LTP + volume + displayed L5 prices/quantities'}
+            with conn:
+                with conn.cursor() as cur:
+                    if inserted_total == 0:
+                        cur.execute("DELETE FROM scalper_live_sessions WHERE id=%s",(session_id,))
+                    else:
+                        cur.execute("""UPDATE scalper_live_sessions SET finished_at=%s,status='completed',snapshot_count=%s,stored_snapshot_count=%s,
+                          universe_count=%s,mapped_count=%s,result_json=%s,config_json=config_json || %s::jsonb,
+                          last_heartbeat_at=%s,last_error=NULL WHERE id=%s""",
+                          (meta['last_ts'],total_seen,inserted_total,meta['universe_count'],meta['universe_count'],json.dumps(result),
+                           json.dumps({'rows_seen':total_seen,'rows_inserted':inserted_total,'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total}),
+                           datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),session_id))
+            _scalper_import_job_set(job_id,status='completed',stage='complete' if inserted_total else 'duplicate rows — nothing added',progress_pct=100.0,
+              session_id=None if inserted_total==0 else session_id,rows_seen=total_seen,rows_inserted=inserted_total,duplicates=duplicate_total,conflicts=conflict_total,metadata=meta,label=meta['label'],
+              message=('Every snapshot was already present; no database rows were added.' if inserted_total==0 else 'Session imported additively; existing identical snapshots were skipped.'))
+        finally:
+            conn.close()
+    except Exception as exc:
+        app.logger.exception('scalper session import failed')
+        if session_id:
+            try:
+                conn2=get_db_connection(timeout_seconds=10)
+                if conn2:
+                    with conn2:
+                        with conn2.cursor() as cur: cur.execute("UPDATE scalper_live_sessions SET status='error',last_error=%s WHERE id=%s",(str(exc)[:1000],session_id))
+                    conn2.close()
+            except Exception:
+                pass
+        _scalper_import_job_set(job_id,status='error',stage='failed',progress_pct=100.0,error=str(exc)[:1200],session_id=session_id)
+    finally:
+        try: os.remove(path)
+        except OSError: pass
+
+@app.post('/api/scalper/live/import/session')
+def scalper_live_import_session_start():
+    upload = request.files.get('session')
+    if upload is None or not upload.filename:
+        return _scalper_json_response({'ok':False,'error':'Choose an L5 snapshot CSV or CSV.GZ file.'},400)
+    filename=os.path.basename(upload.filename)
+    if not filename.casefold().endswith(('.csv','.csv.gz','.csv.gzip','.gz','.gzip')):
+        return _scalper_json_response({'ok':False,'error':'Session import accepts snapshot CSV or CSV.GZ files exported from UltraScalp.'},400)
+    with SCALPER_SESSION_IMPORT_LOCK:
+        active=[k for k,v in SCALPER_SESSION_IMPORT_JOBS.items() if v.get('status') in ('queued','running')]
+        if active: return _scalper_json_response({'ok':False,'error':'Another session import is already running.','job_id':active[0]},409)
+        job_id=hashlib.sha256(f"scalper-session-import:{time.time_ns()}:{os.getpid()}".encode()).hexdigest()[:16]
+        path=os.path.join(tempfile.gettempdir(),f'marketpredictor-scalper-session-{job_id}-{filename}')
+        SCALPER_SESSION_IMPORT_JOBS[job_id]={'job_id':job_id,'status':'queued','stage':'uploaded','progress_pct':0.0,'filename':filename,'created_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'updated_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    try:
+        upload.save(path)
+    except Exception as exc:
+        with SCALPER_SESSION_IMPORT_LOCK: SCALPER_SESSION_IMPORT_JOBS.pop(job_id,None)
+        return _scalper_json_response({'ok':False,'error':f'Could not save upload: {exc}'},500)
+    threading.Thread(target=_run_scalper_session_import_job,args=(job_id,path,filename),daemon=True,name=f'scalper-session-import-{job_id}').start()
+    return _scalper_json_response({'ok':True,'job_id':job_id,'message':'Session import queued. Existing rows will be preserved and exact duplicates skipped.'})
+
+@app.get('/api/scalper/live/import/status/<job_id>')
+def scalper_live_import_session_status(job_id: str):
+    job=_scalper_import_job_get(job_id)
+    if not job: return _scalper_json_response({'ok':False,'error':'Session import job not found or expired.'},404)
+    return _scalper_json_response({'ok':True,**job})
+
 @app.get('/api/scalper/live/sessions')
 def scalper_live_sessions_endpoint():
     limit = max(1, min(int(request.args.get('limit', 20)), 100))
