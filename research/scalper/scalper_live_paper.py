@@ -427,6 +427,7 @@ class LivePaperWorker:
         self._market_return_history: deque = deque(maxlen=10)
         self._positions: Dict[str, Dict[str, Any]] = {}
         self._last_entry_at: Dict[str, datetime] = {}
+        self._last_signal_direction: Dict[str, int] = {}
         self._snapshot_buffer: List[Dict[str, Any]] = []
         self._last_flush = time.monotonic()
         self._config_fingerprint = None
@@ -1030,6 +1031,17 @@ class LivePaperWorker:
             self.state["capital_utilization_inr"] = len(self._positions) * position_notional
         if len(self._positions) >= effective_max:
             return False, "capital_limit"
+        # Entry confirmation: require the directional thesis to persist across
+        # consecutive real snapshots for the same symbol. This targets the
+        # observed adverse-selection problem without tuning a price threshold.
+        prev_signal = int(self._last_signal_direction.get(symbol, 0) or 0)
+        current_signal = int(result.get("direction") or 0)
+        if current_signal == 0:
+            return False, result.get("rejection_reason") or "no_final_signal"
+        if prev_signal != current_signal:
+            self._last_signal_direction[symbol] = current_signal
+            return False, "entry_confirmation_pending"
+        self._last_signal_direction[symbol] = current_signal
         if int(result.get("direction") or 0) == 0:
             return False, result.get("rejection_reason") or "no_final_signal"
         if settings.get("v12_mode", True) and settings.get("v12_require_calibration", False):
@@ -1164,8 +1176,11 @@ class LivePaperWorker:
         safety_timeout = float(settings.get("v12_safety_timeout_minutes", settings.get("max_hold_minutes", 30))) if settings.get("v12_mode", True) else float(settings.get("max_hold_minutes", 10))
         if exit_reason is None and age_min >= safety_timeout:
             exit_reason = "V12_SAFETY_TIMEOUT" if settings.get("v12_mode", True) else "TIME_EXIT"
-        if exit_reason is None and now.time() >= FORCE_EXIT_TIME:
-            exit_reason = "FORCE_CLOSE"
+        # Never allow a paper position to survive the session boundary.
+        # FORCE_EXIT_TIME is intentionally earlier than the exchange close so the
+        # worker has a full buffer to persist the exit even when provider latency spikes.
+        if now.time() >= FORCE_EXIT_TIME:
+            exit_reason = exit_reason or "FORCE_CLOSE"
         if exit_reason is None:
             return
         gross = side * ((ltp / float(pos["entry_price"])) - 1.0) * 100.0
