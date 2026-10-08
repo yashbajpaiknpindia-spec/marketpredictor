@@ -8,3 +8,4 @@ gunicorn==22.0.0
 psycopg2-binary==2.9.9
 ijson==3.3.0
 scikit-learn==1.5.2
+boto3==1.35.99
