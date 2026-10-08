@@ -50,6 +50,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "v12_economic_lock_net_pct": 0.20,
     "v12_profit_lock_arm_net_pct": 0.075,
     "v12_profit_lock_trail_gross_pct": 0.075,
+    "v12_profit_lock_trail_fraction": 0.25,
     "v12_thesis_flip_persistence": 2,
     # Raw V12 confidence is a score, never a probability. Live entry requires
     # an explicitly trained, frozen calibration profile.
@@ -1083,6 +1084,7 @@ class LivePaperWorker:
             "v12_economic_lock_net_pct": float(settings.get("v12_economic_lock_net_pct", 0.20)),
             "v12_profit_lock_arm_net_pct": float(settings.get("v12_profit_lock_arm_net_pct", 0.075)),
             "v12_profit_lock_trail_gross_pct": float(settings.get("v12_profit_lock_trail_gross_pct", 0.075)),
+            "v12_profit_lock_trail_fraction": float(settings.get("v12_profit_lock_trail_fraction", 0.25)),
             "v12_thesis_flip_persistence": int(settings.get("v12_thesis_flip_persistence", 2)),
             "peak_gross_pct": 0.0,
             "economic_lock_active": False,
@@ -1133,8 +1135,10 @@ class LivePaperWorker:
 
             if bool(settings.get("v12_profit_lock_enabled", True)):
                 arm_net = float(settings.get("v12_profit_lock_arm_net_pct", 0.075))
-                trail_gross = float(settings.get("v12_profit_lock_trail_gross_pct", 0.075))
+                trail_floor = float(settings.get("v12_profit_lock_trail_gross_pct", 0.075))
+                trail_fraction = float(settings.get("v12_profit_lock_trail_fraction", 0.25))
                 peak_gross = max(float(pos.get("peak_gross_pct") or 0.0), gross_now)
+                trail_gross = max(trail_floor, peak_gross * trail_fraction)
                 if net_now >= arm_net:
                     if not pos.get("economic_lock_active"):
                         with self.lock:
