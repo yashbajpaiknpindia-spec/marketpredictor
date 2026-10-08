@@ -3952,10 +3952,10 @@ def _ensure_db_pool(timeout_seconds: Optional[float] = None):
         if _DB_POOL is not None and getattr(_DB_POOL, 'owner_pid', None) == os.getpid():
             return _DB_POOL
         timeout = int(timeout_seconds or _db_connect_timeout_seconds())
-        primary = max(2, _env_int('DATABASE_POOL_MAX_CONNECTIONS', 4))
+        primary = max(2, _env_int('DATABASE_POOL_MAX_CONNECTIONS', 6))
         # Threads that already hold a connection draw from this separate reserve
         # so nested checkouts can never deadlock against top-level waiters.
-        reserve = max(1, _env_int('DATABASE_POOL_NESTED_RESERVE', min(primary, 2)))
+        reserve = max(1, _env_int('DATABASE_POOL_NESTED_RESERVE', min(primary, 3)))
         _DB_POOL = _ManagedPool(
             primary, reserve, DATABASE_URL,
             idle_ttl=_env_float('DATABASE_POOL_IDLE_TTL_SECONDS', 300.0),
@@ -6544,7 +6544,7 @@ def _probe_database_pool(timeout_seconds: float = 2.0) -> bool:
         # successful probe inside the cache window is authoritative enough; do
         # not add a database round trip (and pool checkout) per poll.
         if (_DB_CONNECTED.is_set() and _DB_PROBE_OK_MONO
-                and (started - _DB_PROBE_OK_MONO) < _env_float('DATABASE_PROBE_CACHE_SECONDS', 5.0)):
+                and (started - _DB_PROBE_OK_MONO) < _env_float('DATABASE_PROBE_CACHE_SECONDS', 30.0)):
             return True
         conn = None
         try:
@@ -6779,7 +6779,12 @@ def api_system_status():
 @app.get('/api/db-status')
 def api_db_status():
     """Fast DB connectivity status endpoint; schema migration is reported separately."""
-    probe_ok = _probe_database_pool(timeout_seconds=2.0)
+    # Avoid a pooled DB checkout on every browser status poll. Once PostgreSQL
+    # has been verified, the bootstrap worker owns connectivity; repeated probes
+    # only add contention to the request pool.
+    probe_ok = False
+    if not _DB_CONNECTED.is_set():
+        probe_ok = _probe_database_pool(timeout_seconds=2.0)
     return jsonify({
         'ok': True,
         'db_connected': bool(_DB_CONNECTED.is_set() or probe_ok),
