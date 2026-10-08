@@ -906,8 +906,8 @@ Automation is a risk-control and execution workflow, not an assurance of profit.
       </div>
       <div class="scalper-live-help" style="margin-top:7px;">Snapshot export can be very large during a full session. It contains the parsed five bid/ask levels and all recorded signal diagnostics; it does not invent or reconstruct unavailable deeper order-book events.</div>
       <div class="table-card" style="margin-top:12px;">
-        <div class="table-meta"><strong>Live session storage</strong><span>Delete a completed session to remove its snapshots and paper trades from the scalper tables only.</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Session</th><th>Stocks</th><th>Snapshots</th><th>Estimated DB</th><th>Status</th><th>Actions</th></tr></thead><tbody id="scLiveSessionsBody"><tr><td colspan="6">Loading session history…</td></tr></tbody></table></div>
+        <div class="table-meta"><strong>Live session storage</strong><span>Each row is labeled by date, start/end time, duration and detected sampling interval. Imports are additive and deduplicated.</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Session / coverage</th><th>Stocks</th><th>Snapshots / cadence</th><th>Estimated DB</th><th>Status</th><th>Actions</th></tr></thead><tbody id="scLiveSessionsBody"><tr><td colspan="6">Loading session history…</td></tr></tbody></table></div>
       </div>
       <div class="scalper-live-note" style="margin-top:10px;"><strong>Paper-only boundary:</strong> this worker never calls an order-placement endpoint. It records entry/exit decisions, target/stop/time exits, depth state and net P/L for research.</div>
       <div id="scalperLiveProviderNote" class="scalper-live-help" style="margin-top:8px;">Provider capability loading…</div>
