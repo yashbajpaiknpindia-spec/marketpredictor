@@ -48,7 +48,9 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "v12_entry_latency_bars": 1,
     "v12_profit_lock_enabled": True,
     "v12_economic_lock_net_pct": 0.20,
-    "v12_profit_lock_trail_gross_pct": 0.30,
+    "v12_profit_lock_arm_net_pct": 0.075,
+    "v12_profit_lock_trail_gross_pct": 0.075,
+    "v12_thesis_flip_persistence": 2,
     # Raw V12 confidence is a score, never a probability. Live entry requires
     # an explicitly trained, frozen calibration profile.
     "v12_research_probability_candidate": 0.70,
@@ -1079,8 +1081,12 @@ class LivePaperWorker:
             "v12_target_net_pct": float(settings.get("v12_economic_lock_net_pct", settings.get("target_net_pct", 0.20))),
             "v12_gross_target_pct": float(gross_target_pct),
             "v12_economic_lock_net_pct": float(settings.get("v12_economic_lock_net_pct", 0.20)),
-            "v12_profit_lock_trail_gross_pct": float(settings.get("v12_profit_lock_trail_gross_pct", 0.30)),
+            "v12_profit_lock_arm_net_pct": float(settings.get("v12_profit_lock_arm_net_pct", 0.075)),
+            "v12_profit_lock_trail_gross_pct": float(settings.get("v12_profit_lock_trail_gross_pct", 0.075)),
+            "v12_thesis_flip_persistence": int(settings.get("v12_thesis_flip_persistence", 2)),
             "peak_gross_pct": 0.0,
+            "economic_lock_active": False,
+            "l5_flip_streak": 0,
             "v12_entry_latency_bars": int(settings.get("v12_entry_latency_bars", 1)),
             "entry_micro_signal": float(micro_signal),
             "entry_imbalance_l5": float(depth.get("imbalance_l5") or 0.0),
@@ -1117,34 +1123,39 @@ class LivePaperWorker:
                 exit_reason = "TARGET"
             elif ltp >= stop:
                 exit_reason = "STOP"
-        # The target is no longer the reason to stay in a trade. Once live L5
-        # pressure loses the direction that justified entry, close rather than
-        # waiting for an arbitrary +0.60% move. This uses only the current book.
+        # Economic/price protection owns favorable trades before L5 thesis failure.
         if exit_reason is None and result:
             current_micro = float(result.get("micro_signal") or 0.0)
-            entry_micro = float(pos.get("entry_micro_signal") or 0.0)
             gross_now = side * ((ltp / float(pos["entry_price"])) - 1.0) * 100.0
-            net_now = gross_now - float(settings.get("round_trip_cost_pct", 0.1363)) - float(settings.get("entry_slippage_pct", 0.015))
-            if current_micro and np.sign(current_micro) != np.sign(side):
-                exit_reason = "V12_THESIS_FAIL_L5_FLIP"
-            elif bool(settings.get("v12_profit_lock_enabled", True)):
-                # Immediate favorable-move trail: arm on the first move that is
-                # actually net-positive after configured friction/slippage. Do not
-                # wait for the +0.20% economic target before protecting a favorable
-                # path; the economic target remains the model's target, while the
-                # trailing layer is allowed to protect earlier favorable movement.
-                trail_arm_net = 0.0
-                trail_gross = float(settings.get("v12_profit_lock_trail_gross_pct", 0.30))
+            cost_pct = float(settings.get("round_trip_cost_pct", 0.1363))
+            slippage_pct = float(settings.get("entry_slippage_pct", 0.015))
+            net_now = gross_now - cost_pct - slippage_pct
+
+            if bool(settings.get("v12_profit_lock_enabled", True)):
+                arm_net = float(settings.get("v12_profit_lock_arm_net_pct", 0.075))
+                trail_gross = float(settings.get("v12_profit_lock_trail_gross_pct", 0.075))
                 peak_gross = max(float(pos.get("peak_gross_pct") or 0.0), gross_now)
-                if net_now > trail_arm_net:
-                    pos["peak_gross_pct"] = peak_gross
-                    with self.lock:
-                        self.state["economic_lock_activated"] = int(self.state.get("economic_lock_activated") or 0) + (1 if not pos.get("economic_lock_active") else 0)
+                if net_now >= arm_net:
+                    if not pos.get("economic_lock_active"):
+                        with self.lock:
+                            self.state["economic_lock_activated"] = int(self.state.get("economic_lock_activated") or 0) + 1
                     pos["economic_lock_active"] = True
+                    pos["peak_gross_pct"] = peak_gross
                 if pos.get("economic_lock_active") and gross_now <= peak_gross - trail_gross:
-                    exit_reason = "V12_ECONOMIC_PROFIT_LOCK"
+                    exit_reason = "V12_EARLY_PROFIT_LOCK"
                     with self.lock:
                         self.state["economic_lock_exits"] = int(self.state.get("economic_lock_exits") or 0) + 1
+
+            if exit_reason is None:
+                opposite = bool(current_micro and np.sign(current_micro) != np.sign(side))
+                streak = int(pos.get("l5_flip_streak") or 0)
+                streak = streak + 1 if opposite else 0
+                pos["l5_flip_streak"] = streak
+                persistence = max(1, int(settings.get("v12_thesis_flip_persistence", 2)))
+                # A transient book reversal cannot kill a valid momentum trade.
+                # Only a persistent reversal while still net-negative can do so.
+                if streak >= persistence and net_now <= 0.0:
+                    exit_reason = "V12_THESIS_FAIL_L5_FLIP_PERSISTENT"
         age_min = (now.replace(tzinfo=None) - pos["entry_time"]).total_seconds() / 60.0
         safety_timeout = float(settings.get("v12_safety_timeout_minutes", settings.get("max_hold_minutes", 30))) if settings.get("v12_mode", True) else float(settings.get("max_hold_minutes", 10))
         if exit_reason is None and age_min >= safety_timeout:
