@@ -109,10 +109,10 @@ class R2ArchiveStore:
     def enabled(self) -> bool:
         explicit = _env("SCALPER_ARCHIVE_ENABLED", default="")
         configured = all([
-            _env("SCALPER_ARCHIVE_ENDPOINT_URL", "R2_ENDPOINT_URL"),
-            _env("SCALPER_ARCHIVE_BUCKET", "R2_BUCKET"),
-            _env("SCALPER_ARCHIVE_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
-            _env("SCALPER_ARCHIVE_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
+            _env("SCALPER_ARCHIVE_ENDPOINT_URL", "R2_ENDPOINT_URL", "CLOUDFLARE_R2_ENDPOINT"),
+            _env("SCALPER_ARCHIVE_BUCKET", "R2_BUCKET", "CLOUDFLARE_R2_BUCKET"),
+            _env("SCALPER_ARCHIVE_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
+            _env("SCALPER_ARCHIVE_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY", "CLOUDFLARE_R2_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
         ])
         return configured and (True if explicit == "" else _env_bool("SCALPER_ARCHIVE_ENABLED"))
 
@@ -334,7 +334,7 @@ class R2ArchiveStore:
             part_index = 0
             current_part_path = None
             try:
-                with conn.cursor(name=f"r2snap_{os.getpid()}_{threading.get_ident()}_{session_id}") as cur:
+                with conn.cursor(name=f"r2snap_{os.getpid()}_{threading.get_ident()}_{session_id}", withhold=True) as cur:
                     cur.itersize = SNAPSHOT_PART_ROWS
                     cur.execute(
                         f"""
