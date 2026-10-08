@@ -1214,6 +1214,14 @@ def _get_r2_archive_worker():
         if R2_ARCHIVE_WORKER is None:
             R2_ARCHIVE_WORKER = R2ArchiveWorker(db_connect=get_db_connection, logger=app.logger)
             R2_ARCHIVE_WORKER.start()
+            try:
+                app.logger.info('[R2_ARCHIVE] scheduler initialized enabled=%s bucket=%s threshold_mb=%s interval_hours=%s',
+                                R2_ARCHIVE_WORKER.store.enabled,
+                                R2_ARCHIVE_WORKER.store.bucket,
+                                R2_ARCHIVE_WORKER.store.threshold_bytes // (1024 * 1024),
+                                R2_ARCHIVE_WORKER.store.interval_seconds // 3600)
+            except Exception as exc:
+                app.logger.warning('[R2_ARCHIVE] scheduler status log failed: %s', str(exc)[:200])
     return R2_ARCHIVE_WORKER
 
 def _r2_archive_deferred_boot():
