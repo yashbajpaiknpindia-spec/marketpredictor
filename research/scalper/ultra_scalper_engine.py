@@ -293,7 +293,8 @@ def simulate_first_touch(bars: pd.DataFrame, entry_price: float, side: int, conf
     stop = entry_price * (1 - side * config.protection_pct / 100.0)
     cost = config.round_trip_cost_pct + config.entry_slippage_pct
     arm_net = 0.075
-    trail_gross = 0.075
+    trail_floor = 0.075
+    trail_fraction = 0.25
     peak_gross = 0.0
     armed = False
     horizon = bars.head(config.max_hold_bars)
@@ -311,6 +312,7 @@ def simulate_first_touch(bars: pd.DataFrame, entry_price: float, side: int, conf
         peak_gross = max(peak_gross, gross)
         if net >= arm_net:
             armed = True
+        trail_gross = max(trail_floor, peak_gross * trail_fraction)
         if armed and gross <= peak_gross - trail_gross:
             return _finalize(gross, "V12_EARLY_PROFIT_LOCK", i, config)
     last_close = float(horizon.iloc[-1].close) if len(horizon) else entry_price
