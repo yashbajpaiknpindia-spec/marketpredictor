@@ -3109,6 +3109,7 @@ async function scalperRefreshLiveEstimate(){
 }
 let _scalperSessionsLoadInFlight=null;
 let _scalperSessionsLastLoadedAt=0;
+let _scalperSessionsLoadedOnce=false;
 async function loadScalperSessions(force=false){
   const body=document.getElementById('scLiveSessionsBody'); if(!body)return;
   if(!force && Date.now()-_scalperSessionsLastLoadedAt<20000)return;
@@ -3127,7 +3128,9 @@ async function loadScalperSessions(force=false){
       return '<tr><td><strong>#'+id+'</strong><br><span class="small">'+escapeHtml(period)+'</span><br><span class="small muted">'+escapeHtml(source)+'</span></td><td>'+Number(r.universe_count||0).toLocaleString('en-IN')+'</td><td><strong>'+rowsN.toLocaleString('en-IN')+'</strong></td><td>'+scalperFormatBytes(r.estimated_db_bytes||0)+'</td><td>'+escapeHtml(r.status||'—')+(status==='running'?(r.live?' · <b>LIVE</b>':' · <i>stale</i>'):'')+'</td><td>'+actions+'</td></tr>';
     }).join(''):'<tr><td colspan="6">No scalper sessions stored.</td></tr>';
     _scalperSessionsLastLoadedAt=Date.now();
-  }catch(e){body.innerHTML='<tr><td colspan="6">Could not load session history: '+escapeHtml(e.message||e)+'</td></tr>';}finally{_scalperSessionsLoadInFlight=null;}
+  }catch(e){
+    if(!_scalperSessionsLoadedOnce) body.innerHTML='<tr><td colspan="6">Could not load session history: '+escapeHtml(e.message||e)+'</td></tr>';
+  }finally{_scalperSessionsLoadInFlight=null;}
   })();
   return _scalperSessionsLoadInFlight;
 }
@@ -7139,7 +7142,7 @@ irSignalModeChanged();
 pollDatabaseStatus();
 setInterval(pollDatabaseStatus, 15000);
 
-setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperLive(); } }, 10000);
+setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperLive(); loadScalperDepthInspector(); } }, 10000);
 setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperScanStatus(); } }, 30000);
 </script>
 </body>
