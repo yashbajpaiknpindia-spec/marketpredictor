@@ -1677,7 +1677,38 @@ def _run_scalper_session_import_job(job_id: str, path: str, filename: str) -> No
                 cur.execute("SELECT id FROM scalper_live_sessions WHERE COALESCE(config_json->>'import_fingerprint','')=%s LIMIT 1",(meta['sha256'],))
                 existing = cur.fetchone()
             if existing:
-                _scalper_import_job_set(job_id,status='completed',stage='duplicate file — nothing imported',progress_pct=100.0,duplicate=True,duplicate_session_id=int(existing[0]),metadata=meta,label=meta['label'],message='This exact file was already imported. No database rows were added.')
+                existing_id=int(existing[0])
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT id,status,COUNT(*) AS snapshot_rows,MIN(captured_at) AS first_ts,MAX(captured_at) AS last_ts,COUNT(DISTINCT ticker) AS ticker_count FROM scalper_live_snapshots WHERE session_id=%s GROUP BY id,status", (existing_id,))
+                    existing_stats=cur.fetchone()
+                existing_status=str(existing_stats.get('status') or '').lower() if existing_stats else ''
+                if existing_stats and existing_status in ('error','importing'):
+                    repair_result={
+                        'rows_seen':int(existing_stats.get('snapshot_rows') or 0),
+                        'rows_inserted':int(existing_stats.get('snapshot_rows') or 0),
+                        'duplicates_skipped':int(existing_stats.get('snapshot_rows') or 0),
+                        'conflicting_existing_keys':0,
+                        'repaired_previous_import':True,
+                        **meta,
+                    }
+                    with conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""UPDATE scalper_live_sessions SET
+                                session_date=%s,started_at=%s,finished_at=%s,status='completed',
+                                snapshot_count=%s,stored_snapshot_count=%s,universe_count=%s,mapped_count=%s,
+                                result_json=%s,config_json=config_json || %s::jsonb,last_heartbeat_at=%s,last_error=NULL
+                                WHERE id=%s""",
+                                (meta['date'],meta['first_ts'],meta['last_ts'],int(existing_stats.get('snapshot_rows') or 0),
+                                 int(existing_stats.get('snapshot_rows') or 0),int(meta['universe_count']),int(meta['universe_count']),
+                                 json.dumps(_scalper_json_safe(repair_result)),
+                                 json.dumps({'repaired_previous_import':True,'source_label':meta['label']}),
+                                 datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),existing_id))
+                    _scalper_import_job_set(job_id,status='completed',stage='repaired prior failed import — no new rows added',progress_pct=100.0,
+                        duplicate=True,duplicate_session_id=existing_id,metadata=meta,label=meta['label'],
+                        rows_seen=int(existing_stats.get('snapshot_rows') or 0),rows_inserted=0,duplicates=int(existing_stats.get('snapshot_rows') or 0),conflicts=0,
+                        message=f'Existing session #{existing_id} was repaired. No new database rows were added.')
+                    return
+                _scalper_import_job_set(job_id,status='completed',stage='duplicate file — nothing imported',progress_pct=100.0,duplicate=True,duplicate_session_id=existing_id,metadata=meta,label=meta['label'],message='This exact file was already imported. No database rows were added.')
                 return
             config={'imported':True,'source_filename':filename,'import_fingerprint':meta['sha256'],'source_type':'L5_SNAPSHOT_CSV','capture_interval_seconds':meta['interval'].get('median_seconds'),'capture_interval_label':meta['interval'].get('label'),'duration_seconds':meta['duration_seconds'],'duration_label':meta['duration_label'],'label':meta['label'],'universe_symbols':meta['tickers'],'import_format':'additive_deduplicating_v1'}
             with conn:
@@ -1769,7 +1800,7 @@ def _run_scalper_session_import_job(job_id: str, path: str, filename: str) -> No
                         cur.execute("""UPDATE scalper_live_sessions SET finished_at=%s,status='completed',snapshot_count=%s,stored_snapshot_count=%s,
                           universe_count=%s,mapped_count=%s,result_json=%s,config_json=config_json || %s::jsonb,
                           last_heartbeat_at=%s,last_error=NULL WHERE id=%s""",
-                          (meta['last_ts'],total_seen,inserted_total,meta['universe_count'],meta['universe_count'],json.dumps(result),
+                          (meta['last_ts'],total_seen,inserted_total,meta['universe_count'],meta['universe_count'],json.dumps(_scalper_json_safe(result)),
                            json.dumps({'rows_seen':total_seen,'rows_inserted':inserted_total,'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total}),
                            datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),session_id))
             _scalper_import_job_set(job_id,status='completed',stage='complete' if inserted_total else 'duplicate rows — nothing added',progress_pct=100.0,
