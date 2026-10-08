@@ -21,6 +21,7 @@ import json
 import os
 import threading
 import time
+import tempfile
 import uuid
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
