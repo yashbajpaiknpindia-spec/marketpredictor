@@ -655,6 +655,23 @@ class LivePaperWorker:
         return candidates, mapped, failures
 
     def _poll_once(self, settings: Dict[str, Any], now: datetime) -> None:
+        # Close every open paper position before the exchange session boundary,
+        # even if the provider returns no quote in this cycle. This prevents a
+        # stale/missing quote from allowing a position to cross the session close.
+        if now.time() >= FORCE_EXIT_TIME and self._positions:
+            for _symbol in list(self._positions):
+                _pos = self._positions.get(_symbol)
+                _ltp = self._last_prices.get(_symbol)
+                if _pos and _ltp and _ltp > 0:
+                    self._manage_position(
+                        _symbol,
+                        str(_pos.get("scrip_code") or ""),
+                        now,
+                        float(_ltp),
+                        self._prev_depth.get(_symbol) or {},
+                        settings,
+                        None,
+                    )
         if not self._symbols:
             # Mapping failed at session start (usually INDstocks auth/instrument master unavailable).
             # Previously the worker sat here forever; retry mapping every 30 s and say why we wait.
