@@ -1860,10 +1860,8 @@ def scalper_live_sessions_endpoint():
         return _scalper_json_response({'ok': False, 'error': 'Database unavailable'}, 503)
     try:
         _scalper_schema_required(conn)
-        try:
-            _scalper_reap_stale_sessions(conn)
-        except Exception:
-            conn.rollback()
+        # Session History is intentionally read-only. Stale-session cleanup belongs to
+        # the worker/session lifecycle, not a repeatedly polled UI endpoint.
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Session rows are the authoritative lightweight ledger for counts. Do not
             # COUNT(*) the snapshot/trade tables here: this endpoint is polled by the
@@ -6066,6 +6064,72 @@ def _background_schema_compatibility_repair() -> None:
                     pass
     print('[DB_BOOTSTRAP] compatibility repair exhausted short retries; next service boot/request status will retry through the bootstrap supervisor')
 
+def _repair_imported_scalper_session_metadata(conn) -> int:
+    """Repair metadata for additive imports that stored snapshots but failed finalization.
+
+    This is metadata-only: existing snapshot rows are never rewritten or deleted.
+    It runs during schema/bootstrap convergence, not on the Session History polling path.
+    """
+    repaired = 0
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id
+                  FROM scalper_live_sessions
+                 WHERE config_json->>'imported' = 'true'
+                   AND status IN ('error','importing')
+                 ORDER BY id
+                 LIMIT 25
+            """)
+            ids = [int(row['id']) for row in cur.fetchall()]
+            for sid in ids:
+                cur.execute("""
+                    SELECT COUNT(*) AS rows,
+                           COUNT(DISTINCT ticker) AS tickers,
+                           MIN(captured_at) AS first_ts,
+                           MAX(captured_at) AS last_ts
+                      FROM scalper_live_snapshots
+                     WHERE session_id=%s
+                """, (sid,))
+                stats = cur.fetchone() or {}
+                rows = int(stats.get('rows') or 0)
+                if rows <= 0:
+                    continue
+                first_ts = stats.get('first_ts')
+                last_ts = stats.get('last_ts')
+                tickers = int(stats.get('tickers') or 0)
+                repair = {
+                    'repaired_previous_import': True,
+                    'metadata_repair': 'existing_snapshot_rows_promoted_to_completed_session',
+                    'rows_seen': rows,
+                    'rows_inserted': rows,
+                }
+                cur.execute("""
+                    UPDATE scalper_live_sessions
+                       SET session_date=COALESCE(%s::date, session_date),
+                           started_at=COALESCE(%s, started_at),
+                           finished_at=COALESCE(%s, finished_at),
+                           status='completed',
+                           snapshot_count=%s,
+                           stored_snapshot_count=%s,
+                           universe_count=GREATEST(universe_count,%s),
+                           mapped_count=GREATEST(mapped_count,%s),
+                           result_json=COALESCE(result_json,'{}'::jsonb) || %s::jsonb,
+                           last_heartbeat_at=NOW(),
+                           last_error=NULL
+                     WHERE id=%s
+                """, (first_ts, first_ts, last_ts, rows, rows, tickers, tickers, json.dumps(repair, default=_json_safe), sid))
+                repaired += 1
+            if repaired:
+                conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        app.logger.exception('scalper imported-session metadata repair failed')
+    return repaired
+
 def _diagnose_schema_blocker(conn) -> None:
     """Best-effort diagnostic for lock/blocking problems during schema migration."""
     try:
@@ -6216,6 +6280,7 @@ def _initialize_database_background() -> None:
                 _apply_schema_compatibility_delta(conn)
                 if not _scalper_schema_contract_present(conn):
                     raise RuntimeError('Scalper compatibility migration completed without a complete Scalper schema contract')
+                _repair_imported_scalper_session_metadata(conn)
                 _schema_state_upsert(conn)
                 schema_ms = (time.monotonic() - schema_started) * 1000.0
                 _DB_SCHEMA_MS = round(schema_ms, 1)
@@ -6274,6 +6339,7 @@ def _initialize_database_background() -> None:
                     _apply_schema_compatibility_delta(conn)
                     if not _scalper_schema_contract_present(conn):
                         raise RuntimeError('Scalper compatibility migration completed without a complete Scalper schema contract')
+                    _repair_imported_scalper_session_metadata(conn)
                     _schema_state_upsert(conn)
                     schema_ms = (time.monotonic() - schema_started) * 1000.0
                     _DB_SCHEMA_MS = round(schema_ms, 1)
@@ -6287,6 +6353,9 @@ def _initialize_database_background() -> None:
                     print(f'[DB_BOOTSTRAP] status=READY phase=ready_compatibility scalper_contract_missing=true scalper_schema_verified=true additive_repair=synchronous elapsed={schema_ms/1000.0:.3f}s')
                     return
                 _DB_SCHEMA_MODE = 'fast_path'
+                # Repair metadata for any earlier additive import that stored rows
+                # but failed only during final session finalization.
+                _repair_imported_scalper_session_metadata(conn)
                 # Stamp/adopt the marker only while we own the cluster-wide lock.
                 _schema_state_upsert(conn)
                 print('[DB_BOOTSTRAP] status=READY phase=fast_path verification=passed')
