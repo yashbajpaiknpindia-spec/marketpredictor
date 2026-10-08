@@ -1231,7 +1231,6 @@ def _r2_archive_deferred_boot():
             time.sleep(10.0)
     app.logger.error('[R2_ARCHIVE] scheduler did not initialize within 120 seconds')
 
-threading.Thread(target=_r2_archive_deferred_boot, name='r2-archive-bootstrap', daemon=True).start()
 
 @app.get('/api/storage/r2-status')
 def storage_r2_status_endpoint():
@@ -4061,6 +4060,15 @@ def get_db_connection(timeout_seconds: Optional[float] = None):
         _DB_POOL_BORROWED += 1
     _mark_db_connected_from_pool()
     return _PooledConnection(pool, raw, sem, cell, on_return=_db_pool_return_hook)
+
+
+# Start the R2 scheduler only after get_db_connection itself has been defined.
+# A delayed one-shot bootstrap avoids the historical module-import ordering race
+# and gives the database bootstrap a short head start.
+threading.Timer(
+    float(os.environ.get('SCALPER_ARCHIVE_BOOT_DELAY_SECONDS', '30')),
+    _get_r2_archive_worker,
+).start()
 
 
 def _db_pool_stats() -> Dict[str, Any]:
