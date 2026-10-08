@@ -2130,9 +2130,16 @@ function renderDatabaseStatus(data) {
   }
 }
 
-async function pollDatabaseStatus() {
-  try {
-    const data = await fetchJsonWithTimeout('/api/db-status', { cache: 'no-store' }, 3500);
+let _dbStatusPollInFlight=false;
+let _dbStatusLastGood=null;
+let _dbStatusConsecutiveFailures=0;
+async function pollDatabaseStatus(){
+  if(_dbStatusPollInFlight)return;
+  _dbStatusPollInFlight=true;
+  try{
+    const data=await fetchJsonWithTimeout('/api/db-status',{cache:'no-store'},5000);
+    _dbStatusLastGood=data;
+    _dbStatusConsecutiveFailures=0;
     const nowReady = !!data.db_ready;
     renderDatabaseStatus(data);
     if (nowReady && !dbWasReady) {
@@ -2146,10 +2153,11 @@ async function pollDatabaseStatus() {
       const note = document.getElementById('intradayNote');
       if (note && !intradayLoadedOnce) note.textContent = 'Database setup is still finishing. MarketPredictor will load the Intraday Engine automatically when DB: Ready appears.';
     }
-  } catch (e) {
-    dbWasReady = false;
-    renderDatabaseStatus({ db_status: 'error', db_error: e.message || 'Web service is unreachable.' });
-  }
+  }catch(e){
+    _dbStatusConsecutiveFailures++;
+    if(_dbStatusLastGood && (_dbStatusLastGood.db_ready || dbWasReady))return;
+    if(_dbStatusConsecutiveFailures>=3)renderDatabaseStatus({db_status:'error',db_error:e.message||'Database status check failed.'});
+  }finally{_dbStatusPollInFlight=false;}
 }
 
 // Live IST clock in the header. We don't want to poll every second just to
@@ -3070,7 +3078,13 @@ function scalperRenderDepthFeed(d){
   loadScalperDepthInspector();
 }
 function _scalperFmtTime(v){if(!v)return '—';try{return new Date(v+'Z').toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return String(v).replace('T',' ');}}
-function _scalperFmtDateTime(v){if(!v)return '—';try{return new Date(v).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return String(v).replace('T',' ');}}
+function _scalperParseTimestamp(v){if(!v)return null;let s=String(v).trim();if(!s)return null;if(!/[zZ]|[+-]\\d{2}:?\\d{2}$/.test(s))s+='+05:30';const d=new Date(s);return Number.isFinite(d.getTime())?d:null;}
+function _scalperFmtDateTime(v){const d=_scalperParseTimestamp(v);if(!d)return v?String(v).replace('T',' '):'—';return new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(d);}
+function _scalperOrdinal(n){const x=Number(n)||0,m=x%100;return x+(m>=11&&m<=13?'th':x%10===1?'st':x%10===2?'nd':x%10===3?'rd':'th');}
+function _scalperPrettyDate(v){const raw=String(v||'');const m=raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);if(!m)return '—';const months=['January','February','March','April','May','June','July','August','September','October','November','December'];return `${_scalperOrdinal(Number(m[3]))} ${months[Number(m[2])-1]} ${m[1]}`;}
+function _scalperSessionTime(v){const d=_scalperParseTimestamp(v);if(!d)return '—';return new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(d);}
+function _scalperDurationLabel(start,end,fallback){if(fallback)return String(fallback);const a=_scalperParseTimestamp(start),b=_scalperParseTimestamp(end);if(!a||!b)return 'duration unknown';let s=Math.max(0,Math.round((b-a)/1000)),h=Math.floor(s/3600);s%=3600;const m=Math.floor(s/60);s%=60;if(h)return `${h}h${m?' '+m+'m':''}`;if(m)return `${m}m${s?' '+s+'s':''}`;return `${s}s`;}
+function _scalperSessionLabel(r,cfg){const date=_scalperPrettyDate(r.session_date||r.started_at),start=_scalperSessionTime(r.started_at),end=_scalperSessionTime(r.finished_at||r.last_heartbeat_at),duration=_scalperDurationLabel(r.started_at,r.finished_at||r.last_heartbeat_at,cfg.duration_label);let interval=cfg.capture_interval_label||'';if(!interval&&cfg.poll_interval_ms)interval=`${(Number(cfg.poll_interval_ms)/1000).toFixed(Number(cfg.poll_interval_ms)%1000?2:0)}s configured interval`;if(!interval)interval='interval unknown';const stocks=Number(r.universe_count||cfg.universe_symbols?.length||0);return `${date} · ${start}–${end} IST · ${duration} · ${interval} · ${stocks.toLocaleString('en-IN')} stocks`;}
 function _scalperMoney(v){const n=Number(v||0);return `${n>=0?'+':''}₹${n.toLocaleString('en-IN',{maximumFractionDigits:2})}`;}
 function scalperFormatBytes(n){
   let v=Number(n||0); if(!Number.isFinite(v)||v<=0)return '0 B';
@@ -3092,40 +3106,49 @@ async function scalperRefreshLiveEstimate(){
     const el=document.getElementById('scLiveEstimateNote'); if(el)el.textContent=`Estimate unavailable: ${e.message||e}`;
   }
 }
-async function loadScalperSessions(){
+let _scalperSessionsLoadInFlight=null;
+let _scalperSessionsLastLoadedAt=0;
+async function loadScalperSessions(force=false){
   const body=document.getElementById('scLiveSessionsBody'); if(!body)return;
-  try{
+  if(!force && Date.now()-_scalperSessionsLastLoadedAt<20000)return;
+  if(_scalperSessionsLoadInFlight)return _scalperSessionsLoadInFlight;
+  _scalperSessionsLoadInFlight=(async()=>{try{
     const d=await _scalperFetchJson('/api/scalper/live/sessions?limit=20',{cache:'no-store'});
     const rows=d.sessions||[];
     body.innerHTML=rows.length?rows.map(r=>{
       const status=String(r.status||'').toLowerCase(), canDelete=status!=='running'&&status!=='importing', id=Number(r.id||0);
       const rowsN=Number(r.snapshot_rows||r.stored_snapshot_count||0);
       let cfg=r.config_json||{}; if(typeof cfg==='string'){try{cfg=JSON.parse(cfg)}catch(_e){cfg={}}}
-      const period=cfg.label||((r.session_date||'—')+' · '+(r.started_at||'—')+(r.finished_at?' → '+r.finished_at:''));
-      const interval=cfg.capture_interval_label||'interval unknown', duration=cfg.duration_label||'duration unknown';
+      const period=_scalperSessionLabel(r,cfg);
+
       const source=cfg.imported?'Imported · additive':(r.provider||'Live capture');
       const actions='<a class="secondary-btn" href="/api/scalper/live/export/snapshots.csv?session_id='+id+'" download>Snapshots</a> <a class="secondary-btn" href="/api/scalper/live/export/trades.csv?session_id='+id+'" download>Trades</a> '+(canDelete?'<button class="secondary-btn danger-btn" type="button" onclick="deleteScalperSession('+id+')">🗑 Delete</button>':'<button class="secondary-btn" type="button" disabled>In progress</button>');
-      return '<tr><td><strong>#'+id+'</strong><br><span class="small">'+escapeHtml(period)+'</span><br><span class="small muted">'+escapeHtml(source)+'</span></td><td>'+Number(r.universe_count||0).toLocaleString('en-IN')+'</td><td><strong>'+rowsN.toLocaleString('en-IN')+'</strong><br><span class="small muted">'+escapeHtml(interval)+'</span><br><span class="small muted">'+escapeHtml(duration)+'</span></td><td>'+scalperFormatBytes(r.estimated_db_bytes||0)+'</td><td>'+escapeHtml(r.status||'—')+(status==='running'?(r.live?' · <b>LIVE</b>':' · <i>stale</i>'):'')+'</td><td>'+actions+'</td></tr>';
+      return '<tr><td><strong>#'+id+'</strong><br><span class="small">'+escapeHtml(period)+'</span><br><span class="small muted">'+escapeHtml(source)+'</span></td><td>'+Number(r.universe_count||0).toLocaleString('en-IN')+'</td><td><strong>'+rowsN.toLocaleString('en-IN')+'</strong></td><td>'+scalperFormatBytes(r.estimated_db_bytes||0)+'</td><td>'+escapeHtml(r.status||'—')+(status==='running'?(r.live?' · <b>LIVE</b>':' · <i>stale</i>'):'')+'</td><td>'+actions+'</td></tr>';
     }).join(''):'<tr><td colspan="6">No scalper sessions stored.</td></tr>';
-  }catch(e){body.innerHTML='<tr><td colspan="6">Could not load session history: '+escapeHtml(e.message||e)+'</td></tr>';}
+    _scalperSessionsLastLoadedAt=Date.now();
+  }catch(e){body.innerHTML='<tr><td colspan="6">Could not load session history: '+escapeHtml(e.message||e)+'</td></tr>';}finally{_scalperSessionsLoadInFlight=null;}
+  })();
+  return _scalperSessionsLoadInFlight;
 }
 async function deleteScalperSession(id){
   if(!confirm(`Delete UltraScalp session #${id}? This permanently removes its stored snapshots and paper trades from the scalper tables. Other MarketPredictor data is not touched.`)) return;
   try{
     const d=await _scalperFetchJson(`/api/scalper/live/session/${id}`,{method:'DELETE'});
     scalperNotify('UltraScalp data deleted',`Session #${id}: ${Number(d.deleted_snapshot_count||0).toLocaleString('en-IN')} snapshots removed.`);
-    await loadScalperSessions(); await loadScalperLive(); await scalperRefreshLiveEstimate();
+    await loadScalperSessions(true); await loadScalperLive(); await scalperRefreshLiveEstimate();
   }catch(e){showToast('Delete scalper session',e.message||String(e),'error');}
 }
 
+let _scalperLiveLoadInFlight=null;
 async function loadScalperLive(){
-  try{
+  if(_scalperLiveLoadInFlight)return _scalperLiveLoadInFlight;
+  _scalperLiveLoadInFlight=(async()=>{try{
     const d=await _scalperFetchJson('/api/scalper/live/status',{cache:'no-store'});
     let td={trades:[]};
     try{ td=await _scalperFetchJson('/api/scalper/live/trades?limit=20',{cache:'no-store'}); }
     catch(tradeErr){ console.warn('Scalper trades panel unavailable:', tradeErr); }
     if(!scalperSettingsDirty){ scalperApplyLiveSettings(d.settings||{}); if(Date.now()-scalperEstimateLastRefreshMs>30000) scalperRefreshLiveEstimate(); }
-    loadScalperSessions();
+    loadScalperSessions(false);
     const pill=document.getElementById('scalperLivePill'); const pillTop=document.getElementById('scalperLivePillTop'); const phase=document.getElementById('scLivePhase');
     const livePhase=String(d.phase||'');
     const running=!!d.thread_alive && ['live_paper','squaring_off'].includes(livePhase);
@@ -3184,6 +3207,9 @@ async function loadScalperLive(){
     if(bannerMeta) bannerMeta.textContent='Status check failed · '+_scalperFmtDateTime(new Date().toISOString());
     showToast('Scalper live status',e.message||String(e),'error');
   }
+  }
+  })();
+  try{return await _scalperLiveLoadInFlight;}finally{_scalperLiveLoadInFlight=null;}
 }
 
 async function loadScalperScanStatus(){
@@ -7110,9 +7136,9 @@ if (initialOpen === 'export' || initialOpen === 'replay') {
 }
 irSignalModeChanged();
 pollDatabaseStatus();
-setInterval(pollDatabaseStatus, 3000);
+setInterval(pollDatabaseStatus, 15000);
 
-setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperLive(); loadScalperScanStatus(); } }, 5000);
+setInterval(()=>{ if(document.getElementById('scalperView')?.style.display!=='none'){ loadScalperLive(); loadScalperScanStatus(); } }, 10000);
 </script>
 </body>
 </html>
