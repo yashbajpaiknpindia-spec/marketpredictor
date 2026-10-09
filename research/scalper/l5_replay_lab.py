@@ -47,9 +47,14 @@ def _future_ltp(s: pd.DataFrame, horizon_seconds: int) -> pd.Series:
     """Forward return using the first captured observation at/after the horizon."""
     x = s.sort_values(["ticker", "captured_at"]).copy()
     x["captured_at"] = pd.to_datetime(x["captured_at"])
+    x["_cal_date"] = x["captured_at"].dt.date
+    group_cols = ["ticker"]
+    if "session_id" in x.columns:
+        group_cols.append("session_id")
+    group_cols.append("_cal_date")
     out = pd.Series(index=x.index, dtype=float)
-    for _, g in x.groupby("ticker", sort=False):
-        t = g["captured_at"].astype("int64").to_numpy()
+    for _, g in x.groupby(group_cols, sort=False, dropna=False):
+        t = g["captured_at"].astype("datetime64[ns]").astype("int64").to_numpy()
         px = g["ltp"].astype(float).to_numpy()
         target = t + int(horizon_seconds * 1e9)
         idx = np.searchsorted(t, target, side="left")
@@ -218,16 +223,17 @@ def blind_test_v12_calibrated(
     entry_slippage_pct: float = 0.015,
     protection_pct: float = 0.18,
     positive_net_floor_pct: float = 0.005,
-    min_probability: float = 0.10,
-    max_adverse_probability: float = 0.80,
-    require_calibration_gate: bool = False,
+    min_probability: float = 0.70,
+    max_adverse_probability: float = 0.35,
+    require_calibration_gate: bool = True,
     max_hold_minutes: int = 30,
 ) -> Dict[str, Any]:
-    """Strict chronological blind test of the calibrated V12 decision gate.
+    """Chronological per-symbol diagnostic for the calibrated V12 decision gate.
 
-    The calibration profile is fit ONLY on the first train_fraction of the
-    chronological stream. The later test segment is never used to select
-    thresholds or calibration parameters. Test trades use the frozen profile.
+    This is deliberately NOT labelled a blind portfolio test: it does not
+    enforce shared capital and its exit approximation is not the live policy.
+    The timestamp split is chronological and the fitted profile uses only the
+    earlier segment, but the result is diagnostic until a portfolio replay is used.
     """
     s=snapshots.copy()
     required={"ticker","captured_at","ltp","signal_direction","edge_pass","score_pass","l2_pass"}
@@ -236,9 +242,13 @@ def blind_test_v12_calibrated(
         return {"ok":False,"error":f"Missing columns: {sorted(missing)}"}
     s["captured_at"]=pd.to_datetime(s["captured_at"])
     s=s.sort_values(["captured_at","ticker"]).reset_index(drop=True)
-    cut=max(1,min(len(s)-1,int(len(s)*train_fraction)))
-    train=s.iloc[:cut].copy()
-    test=s.iloc[cut:].copy()
+    unique_times=np.sort(s["captured_at"].dropna().unique())
+    if len(unique_times) < 2:
+        return {"ok":False,"error":"Need at least two distinct timestamps for a chronological split."}
+    cut_index=max(1,min(len(unique_times)-1,int(len(unique_times)*train_fraction)))
+    cutoff=unique_times[cut_index]
+    train=s[s["captured_at"] < cutoff].copy()
+    test=s[s["captured_at"] >= cutoff].copy()
 
     profile=fit_v12_calibration(
         train, train_fraction=1.0, horizon_seconds=horizon_seconds,
@@ -252,16 +262,23 @@ def blind_test_v12_calibrated(
     gross_target_pct=float(round_trip_cost_pct+entry_slippage_pct+positive_net_floor_pct)
 
     trades=[]
-    groups={k:g.reset_index(drop=True) for k,g in test.groupby("ticker",sort=False)}
-    for ticker,g in groups.items():
+    test["_cal_date"]=test["captured_at"].dt.date
+    group_cols=["ticker"]
+    if "session_id" in test.columns:
+        group_cols.append("session_id")
+    group_cols.append("_cal_date")
+    groups={k:g.reset_index(drop=True) for k,g in test.groupby(group_cols,sort=False,dropna=False)}
+    for group_key,g in groups.items():
+        ticker=str(g["ticker"].iloc[0])
+        session_id=g["session_id"].iloc[0] if "session_id" in g.columns else None
         times=g["captured_at"].to_numpy(dtype="datetime64[ns]")
         px=g["ltp"].astype(float).to_numpy()
         side=g["signal_direction"].fillna(0).astype(int).to_numpy()
         edge=g["edge_pass"].fillna(False).astype(bool).to_numpy()
         score=g["score_pass"].fillna(False).astype(bool).to_numpy()
         l2=g["l2_pass"].fillna(False).astype(bool).to_numpy()
-        pnet=g["v12_p_net_positive"].to_numpy(float)
-        padv=g["v12_p_adverse_stop"].to_numpy(float)
+        ptarget=g["v12_p_target_first"].to_numpy(float)
+        padv=g["v12_p_adverse_first"].to_numpy(float)
         micro=(0.45*g["ofi_proxy"].fillna(0).astype(float)
                +0.35*g["imbalance_l5"].fillna(0).astype(float)
                +0.20*g["microprice_edge_pct"].fillna(0).astype(float)).to_numpy()
@@ -274,7 +291,7 @@ def blind_test_v12_calibrated(
             # intentionally not an executable target anymore.
             remaining_edge = float(g.get("remaining_edge_pct", pd.Series(0.0, index=g.index)).iloc[j] or 0.0)
             economic_pass = remaining_edge >= float(positive_net_floor_pct)
-            if side[j]==0 or not edge[j] or not score[j] or not l2[j] or not economic_pass or (require_calibration_gate and (pnet[j] < min_probability or padv[j] > max_adverse_probability)):
+            if side[j]==0 or not edge[j] or not score[j] or not l2[j] or not economic_pass or (require_calibration_gate and (ptarget[j] < min_probability or padv[j] > max_adverse_probability)):
                 j+=1; continue
             entry=px[j]
             if not np.isfinite(entry) or entry<=0:
@@ -307,15 +324,15 @@ def blind_test_v12_calibrated(
             expected_stop_pct=-abs(protection_pct)
             stop_overshoot_pct=max(0.0, abs(gross)-abs(protection_pct)) if reason=="STOP" else 0.0
             trades.append({
-                "ticker":ticker,"entry_time":str(g["captured_at"].iloc[j]),
+                "ticker":ticker,"session_id":session_id,"entry_time":str(g["captured_at"].iloc[j]),
                 "exit_time":str(g["captured_at"].iloc[exit_idx]),
                 "side":"LONG" if direction>0 else "SHORT",
                 "gross_pct":gross,"net_pct":net,"exit_reason":reason,
                 "expected_stop_gross_pct":expected_stop_pct,
                 "actual_stop_gross_pct":gross if reason=="STOP" else None,
                 "stop_overshoot_pct":stop_overshoot_pct,
-                "raw_confidence":rawconf[j],"p_net_positive":pnet[j],
-                "p_adverse_stop":padv[j],
+                "raw_confidence":rawconf[j],"p_target_first":ptarget[j],
+                "p_adverse_first":padv[j],
             })
             # one position per symbol at a time; resume after exit
             j=exit_idx+1
@@ -343,9 +360,15 @@ def blind_test_v12_calibrated(
         }
     return {
         "ok":True,
-        "evidence_class":"TRUE_L5_REPLAY_BLIND_CALIBRATED",
-        "blind_test":True,
-        "chronological_split": {"train_rows":int(len(train)),"test_rows":int(len(test)),"train_fraction":float(train_fraction)},
+        "evidence_class":"TRUE_L5_REPLAY_CALIBRATION_DIAGNOSTIC_NOT_PORTFOLIO",
+        "blind_test":False,
+        "blind_test_eligible":False,
+        "limitations":[
+            "This routine simulates each ticker independently and does not enforce a shared portfolio capital limit.",
+            "Its simplified exit logic is not an exact replay of the live profit-lock/L5-persistence policy.",
+            "The calibration profile estimates fixed target-first barrier probability, not live-policy net-profit probability."
+        ],
+        "chronological_split": {"train_rows":int(len(train)),"test_rows":int(len(test)),"train_fraction":float(train_fraction),"cutoff_timestamp":str(cutoff)},
         "calibration_profile":profile.to_dict(),
         "policy":{
             "round_trip_cost_pct":round_trip_cost_pct,
@@ -378,24 +401,29 @@ def blind_test_v12_direction_edge(
     direction_probability_threshold: float = 0.70,
     direction_margin: float = 0.02,
     economic_lock_net_pct: float = 0.20,
-    profit_lock_trail_gross_pct: float = 0.30,
+    profit_lock_trail_gross_pct: float = 0.075,
     l5_flip_exit_enabled: bool = False,
     l5_flip_confirmations: int = 3,
     max_hold_minutes: int = 30,
 ) -> Dict[str, Any]:
-    """Chronological blind test using the V12 directional + expected-edge models.
+    """Chronological per-symbol diagnostic for V12 directional/edge models.
 
-    The model is fitted exclusively on the first chronological segment. The blind
-    segment is only scored after the model is frozen. No blind outcomes are used
-    to select the probability or edge thresholds.
+    This is NOT a blind portfolio test: trades are replayed independently per
+    ticker and the simplified exits do not exactly match live-paper execution.
+    The later timestamp segment is not used to fit the model, but its PF is only
+    a development diagnostic, not promotion evidence.
     """
     from .v12_models import fit_v12_models, apply_v12_models
     s = snapshots.copy()
     s["captured_at"] = pd.to_datetime(s["captured_at"])
     s = s.sort_values(["captured_at", "ticker"]).reset_index(drop=True)
-    cut = max(1, min(len(s)-1, int(len(s) * train_fraction)))
-    train = s.iloc[:cut].copy()
-    test = s.iloc[cut:].copy()
+    unique_times = np.sort(s["captured_at"].dropna().unique())
+    if len(unique_times) < 2:
+        return {"ok": False, "error": "Need at least two distinct timestamps for a chronological split."}
+    cut_index = max(1, min(len(unique_times)-1, int(len(unique_times) * train_fraction)))
+    cutoff = unique_times[cut_index]
+    train = s[s["captured_at"] < cutoff].copy()
+    test = s[s["captured_at"] >= cutoff].copy()
     profile = fit_v12_models(
         train, train_fraction=1.0, horizon_seconds=horizon_seconds,
         target_gross_pct=target_gross_pct, protection_pct=protection_pct,
@@ -414,8 +442,15 @@ def blind_test_v12_direction_edge(
     )
     scored["v12_candidate_path_pass"] = candidate_mask
     trades=[]
-    for ticker, g in scored.groupby("ticker", sort=False):
+    scored["_cal_date"] = scored["captured_at"].dt.date
+    group_cols = ["ticker"]
+    if "session_id" in scored.columns:
+        group_cols.append("session_id")
+    group_cols.append("_cal_date")
+    for group_key, g in scored.groupby(group_cols, sort=False, dropna=False):
         g=g.reset_index(drop=True)
+        ticker=str(g["ticker"].iloc[0])
+        session_id=g["session_id"].iloc[0] if "session_id" in g.columns else None
         ts=g["captured_at"].to_numpy(dtype="datetime64[ns]")
         px=pd.to_numeric(g["ltp"],errors="coerce").to_numpy(float)
         md=g["v12_model_direction"].to_numpy(int)
@@ -477,7 +512,7 @@ def blind_test_v12_direction_edge(
             gross=direction*((px[exit_idx]/entry)-1)*100.0
             net=gross-round_trip_cost_pct-entry_slippage_pct
             trades.append({
-                "ticker":ticker,"entry_time":str(g["captured_at"].iloc[j]),"exit_time":str(g["captured_at"].iloc[exit_idx]),
+                "ticker":ticker,"session_id":session_id,"entry_time":str(g["captured_at"].iloc[j]),"exit_time":str(g["captured_at"].iloc[exit_idx]),
                 "side":"LONG" if direction>0 else "SHORT","gross_pct":gross,"net_pct":net,"exit_reason":reason,
                 "model_direction":direction,"p_direction":pdir,"p_long":p_long[j],"p_short":p_short[j],
                 "expected_net_edge_pct":float(exp[j]),"legacy_raw_direction":int(raw[j]),
@@ -513,8 +548,13 @@ def blind_test_v12_direction_edge(
         "p_direction_max":float(max(p_long.max(),p_short.max())),
     }
     return {
-        "ok":True,"evidence_class":"TRUE_L5_REPLAY_BLIND_DIRECTION_EDGE_V1","blind_test":True,
-        "chronological_split":{"train_rows":int(len(train)),"test_rows":int(len(test)),"train_fraction":float(train_fraction)},
+        "ok":True,"evidence_class":"TRUE_L5_REPLAY_DIRECTION_EDGE_DIAGNOSTIC_NOT_PORTFOLIO","blind_test":False,"blind_test_eligible":False,
+        "limitations":[
+            "This routine simulates each ticker independently and does not enforce shared portfolio capital.",
+            "Its stop/target/profit-lock/flip settings are not an exact replay of the live paper worker's full policy.",
+            "Treat all PF values from this routine as development diagnostics, not blind portfolio proof."
+        ],
+        "chronological_split":{"train_rows":int(len(train)),"test_rows":int(len(test)),"train_fraction":float(train_fraction),"cutoff_timestamp":str(cutoff)},
         "model_profile":profile.to_dict(),"diagnostics":diagnostics,
         "policy":{"target_gross_pct":target_gross_pct,"protection_pct":protection_pct,
                    "round_trip_cost_pct":round_trip_cost_pct,"entry_slippage_pct":entry_slippage_pct,

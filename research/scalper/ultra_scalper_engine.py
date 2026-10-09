@@ -39,8 +39,10 @@ class ScalperConfig:
     # frozen empirical profile is explicitly supplied.
     calibration_profile: Optional[Dict[str, Any]] = None
     require_calibrated_probability: bool = False
-    min_calibrated_net_probability: float = 0.10
+    min_calibrated_target_probability: float = 0.70
     max_adverse_probability: float = 0.35
+    calibration_horizon_seconds: int = 300
+    calibration_exit_policy_id: str = "fixed_target_stop_first_touch_v1"
     # Frozen leakage-safe directional/edge model. When supplied, it supersedes the
     # legacy heuristic direction and expected-move estimate for execution decisions.
     v12_model_profile: Optional[Any] = None
@@ -180,25 +182,43 @@ def score_event(row: pd.Series, config: ScalperConfig = ScalperConfig(), entry_l
 
     # IMPORTANT: this number is a model score, not a probability. V12 can only
     # call something a probability after applying a profile fit on earlier data.
-    calibrated_net_probability = None
+    calibrated_target_probability = None
     calibrated_adverse_probability = None
     calibration_status = "not_requested"
     if config.calibration_profile:
         try:
-            from .v12_calibration import apply_v12_calibration
+            from .v12_calibration import apply_v12_calibration, validate_v12_calibration_profile
         except ImportError:
-            from v12_calibration import apply_v12_calibration
-        score_for_calibration = float(raw_confidence + 8.0 * math.tanh(
-            0.45 * float(row.get("ofi_proxy", row.get("ofi", 0.0)) or 0.0)
-            + 0.35 * float(row.get("imbalance_l5", row.get("imbalance_l10", 0.0)) or 0.0)
-            + 0.20 * float(row.get("microprice_edge_pct", row.get("microprice_edge", 0.0)) or 0.0)
-        ))
-        p_net, p_adv = apply_v12_calibration([score_for_calibration], config.calibration_profile)
-        calibrated_net_probability = float(p_net[0])
-        calibrated_adverse_probability = float(p_adv[0])
-        calibration_status = "calibrated"
+            from v12_calibration import apply_v12_calibration, validate_v12_calibration_profile
+        compatible, compatibility_reason = validate_v12_calibration_profile(
+            config.calibration_profile,
+            horizon_seconds=int(config.calibration_horizon_seconds),
+            round_trip_cost_pct=float(config.round_trip_cost_pct),
+            entry_slippage_pct=float(config.entry_slippage_pct),
+            target_gross_pct=float(config.target_pct),
+            protection_pct=float(config.protection_pct),
+            exit_policy_id=str(config.calibration_exit_policy_id),
+        )
+        if compatible:
+            score_for_calibration = float(raw_confidence + 8.0 * math.tanh(
+                0.45 * float(row.get("ofi_proxy", row.get("ofi", 0.0)) or 0.0)
+                + 0.35 * float(row.get("imbalance_l5", row.get("imbalance_l10", 0.0)) or 0.0)
+                + 0.20 * float(row.get("microprice_edge_pct", row.get("microprice_edge", 0.0)) or 0.0)
+            ))
+            p_target, p_adv = apply_v12_calibration([score_for_calibration], config.calibration_profile)
+            calibrated_target_probability = float(p_target[0])
+            calibrated_adverse_probability = float(p_adv[0])
+            calibration_status = "calibrated"
+        else:
+            calibration_status = "incompatible_profile:" + compatibility_reason
     elif config.require_calibrated_probability:
         calibration_status = "missing_profile"
+
+    # A supplied but incompatible calibration artifact is never allowed to fall
+    # back silently to the uncalibrated heuristic, even if a stale settings row has
+    # require_calibrated_probability=False.
+    if config.calibration_profile and calibration_status.startswith("incompatible_profile"):
+        raw_direction = 0
 
     # Gross move estimate is conservative: use observed short-term range and activity,
     # then haircut for entry lag.  This is deliberately not a future-return label.
@@ -212,12 +232,17 @@ def score_event(row: pd.Series, config: ScalperConfig = ScalperConfig(), entry_l
     probability_pass = True
     risk_pass = True
     if config.require_calibrated_probability:
-        probability_pass = calibration_status == "calibrated" and calibrated_net_probability is not None and calibrated_net_probability >= config.min_calibrated_net_probability
+        probability_pass = calibration_status == "calibrated" and calibrated_target_probability is not None and calibrated_target_probability >= config.min_calibrated_target_probability
         risk_pass = calibration_status == "calibrated" and calibrated_adverse_probability is not None and calibrated_adverse_probability <= config.max_adverse_probability
     relative_pass = True
     final_direction = raw_direction if edge_pass and score_pass and probability_pass and risk_pass else 0
     if model_direction is not None:
         final_direction = model_direction if (model_direction != 0 and model_expected_edge is not None and model_expected_edge >= config.min_model_expected_edge_pct and model_target_probability is not None and model_target_probability >= config.min_model_target_probability) else 0
+    # The model-direction override must never bypass calibration or profile integrity.
+    if config.require_calibrated_probability and (not probability_pass or not risk_pass):
+        final_direction = 0
+    if config.calibration_profile and calibration_status.startswith("incompatible_profile"):
+        final_direction = 0
     rejection_reasons = []
     if raw_direction == 0:
         rejection_reasons.append("direction")
@@ -261,9 +286,9 @@ def score_event(row: pd.Series, config: ScalperConfig = ScalperConfig(), entry_l
         "raw_confidence": float(round(raw_confidence, 4)),
         "confidence_semantics": "model_score_0_100_not_probability",
         "calibration_status": calibration_status,
-        "v12_p_net_positive": None if calibrated_net_probability is None else float(round(calibrated_net_probability, 6)),
-        "v12_p_adverse_stop": None if calibrated_adverse_probability is None else float(round(calibrated_adverse_probability, 6)),
-        "v12_probability_pass": bool(probability_pass),
+        "v12_p_target_first": None if calibrated_target_probability is None else float(round(calibrated_target_probability, 6)),
+        "v12_p_adverse_first": None if calibrated_adverse_probability is None else float(round(calibrated_adverse_probability, 6)),
+        "v12_target_probability_pass": bool(probability_pass),
         "v12_adverse_risk_pass": bool(risk_pass),
         "expected_move_pct": float(round(expected_move, 6)),
         "remaining_edge_pct": float(round(remaining_edge, 6)),

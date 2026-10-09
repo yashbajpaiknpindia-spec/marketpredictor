@@ -1,0 +1,37 @@
+name: V12 isolated research tests
+
+on:
+  push:
+    branches:
+      - "research/v12-fail-closed-quote-gate-2026-10-10"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install focused test dependencies
+        run: python -m pip install --upgrade pip pytest numpy pandas joblib scikit-learn
+      - name: Run V12 calibration and quote-integrity tests
+        run: >-
+          python -m pytest -q
+          tests/test_ultrascalp_v12_calibration.py
+          tests/test_ultrascalp_v12_direction_edge.py
+          tests/test_ultrascalp_v12_immediate_favorable_trail.py
+          tests/test_ultrascalp_v12_positive_net_floor.py
+          tests/test_scalper_live_paper.py
+          tests/test_scalper_depth_response_hardening.py
+          tests/test_l5_replay_lab.py
+          tests/test_v12_blind_portfolio_audit.py
+          research/scalper/tests/test_v12_quote_gate.py

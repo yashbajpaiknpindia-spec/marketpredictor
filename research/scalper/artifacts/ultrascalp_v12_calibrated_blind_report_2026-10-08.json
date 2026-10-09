@@ -21,7 +21,8 @@
     "calibration_positive_rate_min": 0.12182044887780549,
     "calibration_positive_rate_max": 0.16992893654157837,
     "calibration_adverse_rate_min": 0.07606933532859458,
-    "calibration_adverse_rate_max": 0.11108340605909488
+    "calibration_adverse_rate_max": 0.11108340605909488,
+    "classification": "historical chronological split diagnostic; not a valid blind portfolio test"
   },
   "diagnostic_lower_threshold": {
     "note": "Not used to select or tune the official blind result; shown only as a sensitivity check.",
@@ -48,7 +49,7 @@
     "profit_factor": 0.3265067464389432,
     "max_open_positions": 200
   },
-  "conclusion": "The frozen calibration layer correctly prevents the uncalibrated 0-100 score from being treated as probability. At the requested 70% calibrated probability gate, there are no eligible trades on this real stream. Lowering the gate to 15% does not recover positive edge: PF 0.3166 and mean net -0.1502%. Stop exits also show substantial first-observation overshoot, so the system must record and monitor execution-gap/latency rather than pretending the 0.22% barrier was filled exactly.",
+  "conclusion": "Historical diagnostic only; not valid blind portfolio proof. The 70% threshold produced zero eligible trades, and the 15% sensitivity result was negative (PF 0.3166, mean net -0.1502%). Reclassified because target metadata was inconsistent with slippage and the replay did not enforce shared portfolio capital or exactly match the live exit policy. Do not use these figures to promote a strategy.",
   "files_changed": [
     "research/scalper/v12_calibration.py",
     "research/scalper/ultra_scalper_engine.py",
@@ -57,5 +58,18 @@
     "app.py",
     "templates/index.html",
     "tests/test_ultrascalp_v12_calibration.py"
-  ]
+  ],
+  "evidence_status": "RECLASSIFIED_NOT_VALID_BLIND_PORTFOLIO_TEST",
+  "blind_test_valid": false,
+  "reclassification": {
+    "date": "2026-10-10",
+    "reason": [
+      "The routine that generated this report did not enforce a single shared portfolio capital budget across tickers.",
+      "The fixed-barrier calibration label was described as net-positive probability and its target semantics did not match the live exit policy.",
+      "The reported gross_target_pct 0.1413 equals round_trip_cost_pct + positive_net_floor_pct but excludes the configured entry_slippage_pct; the stored v1 calibration artifact also lacks target-policy metadata and was trained with a different default target.",
+      "The current replay implementation has been changed to label these outputs as diagnostics, not blind portfolio proof."
+    ],
+    "preserved_historical_metrics": true,
+    "use_for_strategy_promotion": false
+  }
 }

@@ -1,0 +1,12 @@
+{
+  "status": "TEMPLATE_NOT_ELIGIBLE",
+  "source_commit": "",
+  "model_sha256": "",
+  "config_sha256": "",
+  "frozen_at": "",
+  "test_session_date": "",
+  "entry_rule_version": "",
+  "exit_policy_id": "",
+  "cost_model_id": "",
+  "notes": "Fill and freeze this manifest before the untouched test session starts. Do not change source, model, thresholds, exits, or cost assumptions after the session begins. Empty fields intentionally make this manifest ineligible for blind-test certification."
+}

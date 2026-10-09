@@ -14,6 +14,9 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import asdict
 from datetime import datetime, timedelta, time as dtime
+import hashlib
+import json
+import os
 import math
 import threading
 import time
@@ -52,17 +55,22 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "v12_profit_lock_trail_gross_pct": 0.075,
     "v12_profit_lock_trail_fraction": 0.25,
     "v12_thesis_flip_persistence": 2,
-    # Raw V12 confidence is a score, never a probability. Live entry requires
-    # an explicitly trained, frozen calibration profile.
+    # Raw V12 confidence is a score, never a probability. Fail closed until an
+    # explicitly trained, frozen calibration profile is supplied.
     "v12_research_probability_candidate": 0.70,
-    "v12_max_adverse_probability": 0.80,
-    "v12_require_calibration": False,
+    "v12_max_adverse_probability": 0.35,
+    "v12_require_calibration": True,
     "v12_calibration_profile": None,
+    "v12_calibration_horizon_seconds": 300,
+    "v12_calibration_exit_policy_id": "live_v12_profit_lock_l5_flip_v1",
+    "v12_entry_rule_version": "v12-entry-gate-v2",
+    "v12_cost_model_id": "nse-roundtrip-cost-v1",
     "v12_model_artifact_path": "research/scalper/artifacts/v12_direction_edge_production.joblib",
     "v12_model_enabled": True,
     "v12_min_model_expected_edge_pct": 0.0,
     "v12_min_model_target_probability": 0.70,
-    # Frozen positive-edge research gate discovered on real S13/S14.
+    # Experimental entry gate. Historical S13/S14 results were in-sample and are
+    # not independent blind-test evidence; do not describe this gate as validated.
     # This is an execution gate only; it does not alter the generic research scorer.
     "v12_research_gate_enabled": True,
     "v12_research_max_spread_pct": 0.15,
@@ -82,6 +90,53 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "store_signal_snapshots_only": False,
     "preopen_capture": True,
 }
+
+
+_V12_AUDIT_CONFIG_KEYS = (
+    "v12_mode", "v12_model_enabled", "v12_model_artifact_path",
+    "v12_require_calibration", "v12_calibration_profile",
+    "v12_calibration_horizon_seconds", "v12_calibration_exit_policy_id",
+    "v12_research_gate_enabled", "v12_research_max_spread_pct",
+    "v12_research_price_lookback", "v12_research_probability_candidate",
+    "v12_max_adverse_probability", "v12_min_model_expected_edge_pct",
+    "v12_min_model_target_probability", "target_pct", "protection_pct",
+    "max_hold_minutes", "round_trip_cost_pct", "entry_slippage_pct",
+    "min_remaining_edge_pct", "min_signal_score", "max_entry_lag_bars",
+    "v12_profit_lock_enabled", "v12_profit_lock_arm_net_pct",
+    "v12_profit_lock_trail_gross_pct", "v12_profit_lock_trail_fraction",
+    "v12_thesis_flip_persistence", "min_notional_inr", "max_open_positions",
+    "paper_capital_inr",
+)
+
+
+def _sha256_file(path: str) -> str:
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
+def _v12_config_sha256(settings: Dict[str, Any]) -> str:
+    policy = {key: settings.get(key, DEFAULT_SETTINGS.get(key)) for key in _V12_AUDIT_CONFIG_KEYS}
+    payload = json.dumps(policy, sort_keys=True, separators=(",", ":"), default=str, allow_nan=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _v12_audit_manifest(settings: Dict[str, Any], session_date: str) -> Dict[str, Any]:
+    model_path = str(settings.get("v12_model_artifact_path") or DEFAULT_SETTINGS["v12_model_artifact_path"])
+    return {
+        "source_commit": str(os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or ""),
+        "model_sha256": _sha256_file(model_path),
+        "config_sha256": _v12_config_sha256(settings),
+        "session_date": str(session_date),
+        "entry_rule_version": str(settings.get("v12_entry_rule_version") or DEFAULT_SETTINGS["v12_entry_rule_version"]),
+        "exit_policy_id": str(settings.get("v12_calibration_exit_policy_id") or DEFAULT_SETTINGS["v12_calibration_exit_policy_id"]),
+        "cost_model_id": str(settings.get("v12_cost_model_id") or DEFAULT_SETTINGS["v12_cost_model_id"]),
+    }
 
 
 def _v12_gross_target_pct(settings: Dict[str, Any]) -> float:
@@ -249,9 +304,39 @@ def extract_depth_levels(quote: Any) -> Dict[str, Any]:
             for k, v in node.items():
                 if isinstance(v, (dict, list)):
                     queue.append((f"{path}.{k}", v, depth + 1))
-    valid = sum(1 for b, a in zip(best_bids, best_asks)
-                if b.get("price", 0) > 0 and a.get("price", 0) > 0 and b.get("qty", 0) > 0 and a.get("qty", 0) > 0)
-    return {"bids": best_bids[:5], "asks": best_asks[:5], "valid_levels": valid, "shape": best_shape}
+    best_bids = best_bids[:5]
+    best_asks = best_asks[:5]
+    valid = sum(
+        1 for b, a in zip(best_bids, best_asks)
+        if b.get("price", 0) > 0 and a.get("price", 0) > 0
+        and b.get("qty", 0) > 0 and a.get("qty", 0) > 0
+    )
+    rows_valid = (
+        len(best_bids) == 5 and len(best_asks) == 5
+        and all(
+            math.isfinite(float(row.get(key, 0.0)))
+            and float(row.get(key, 0.0)) > 0.0
+            for row in best_bids + best_asks for key in ("price", "qty")
+        )
+    )
+    prices_ordered = (
+        len(best_bids) == 5 and len(best_asks) == 5
+        and all(best_bids[i]["price"] >= best_bids[i + 1]["price"] for i in range(4))
+        and all(best_asks[i]["price"] <= best_asks[i + 1]["price"] for i in range(4))
+    )
+    bid1 = float(best_bids[0]["price"]) if best_bids else 0.0
+    ask1 = float(best_asks[0]["price"]) if best_asks else 0.0
+    mid = (bid1 + ask1) / 2.0 if bid1 > 0.0 and ask1 > 0.0 else 0.0
+    spread_pct = ((ask1 - bid1) / mid * 100.0) if mid > 0.0 else 0.0
+    book_integrity_valid = bool(
+        rows_valid and prices_ordered and valid == 5
+        and bid1 > 0.0 and ask1 > bid1
+        and math.isfinite(spread_pct) and spread_pct > 0.0
+    )
+    return {
+        "bids": best_bids, "asks": best_asks, "valid_levels": valid,
+        "book_integrity_valid": book_integrity_valid, "shape": best_shape,
+    }
 
 
 def _parse_depth(quote: Dict[str, Any]) -> Dict[str, Any]:
@@ -286,10 +371,31 @@ def _parse_depth(quote: Dict[str, Any]) -> Dict[str, Any]:
             weighted_imb += w * ((b["qty"] - a["qty"]) / d)
             wsum += w
     book_pressure = weighted_imb / wsum if wsum else 0.0
+    level_rows_valid = (
+        len(bids) == 5
+        and len(asks) == 5
+        and all(
+            math.isfinite(float(row.get("price", 0.0)))
+            and math.isfinite(float(row.get("qty", 0.0)))
+            and float(row.get("price", 0.0)) > 0.0
+            and float(row.get("qty", 0.0)) > 0.0
+            for row in bids + asks
+        )
+    )
+    prices_ordered = (
+        all(bids[i]["price"] >= bids[i + 1]["price"] for i in range(4))
+        and all(asks[i]["price"] <= asks[i + 1]["price"] for i in range(4))
+    )
+    book_integrity_valid = bool(
+        level_rows_valid and prices_ordered and bid1 > 0.0
+        and ask1 > bid1 and math.isfinite(spread_pct) and spread_pct > 0.0
+        and ex["valid_levels"] == 5
+    )
     return {
         "bids": bids,
         "asks": asks,
         "valid_levels": ex["valid_levels"],
+        "book_integrity_valid": book_integrity_valid,
         "depth_shape": ex["shape"],
         "bid1": bid1,
         "ask1": ask1,
@@ -606,6 +712,7 @@ class LivePaperWorker:
         self._last_map_try = time.monotonic()
         self._symbols = mapped
         self.state["credential_status"] = bool(mapped)
+        audit_manifest = _v12_audit_manifest(settings, now.date().isoformat())
         session_payload = {
             "session_date": now.date().isoformat(),
             "started_at": now.replace(tzinfo=None),
@@ -614,8 +721,10 @@ class LivePaperWorker:
             "depth_levels": 5,
             "universe_count": len(candidates),
             "mapped_count": len(mapped),
+            "audit_manifest": audit_manifest,
             "config": {
-                **{k: settings.get(k) for k in DEFAULT_SETTINGS.keys()},
+                **{k: settings.get(k, DEFAULT_SETTINGS.get(k)) for k in DEFAULT_SETTINGS.keys()},
+                "audit_manifest": audit_manifest,
                 "universe_source": "Nifty LargeMidcap 250",
                 "universe_selection_method": "official_250_with_liquid_priority_for_smaller_selection",
                 "universe_symbols": list(candidates),
@@ -623,6 +732,7 @@ class LivePaperWorker:
             },
         }
         self.state["session_id"] = self.create_session(session_payload)  # may raise SessionHeldElsewhere
+        self.state["v12_audit_manifest"] = audit_manifest
         for k, v in (session_payload.get("resumed_counts") or {}).items():
             self.state[k] = v
         self._session = session_payload
@@ -663,6 +773,23 @@ class LivePaperWorker:
         return candidates, mapped, failures
 
     def _poll_once(self, settings: Dict[str, Any], now: datetime) -> None:
+        # Freeze effective V12 policy settings for the life of a session. UI/DB edits
+        # take effect next session, never halfway through a blind-test portfolio.
+        incoming_config_sha = _v12_config_sha256(settings)
+        manifest = (self._session or {}).get("audit_manifest") if isinstance(self._session, dict) else None
+        frozen_config = (self._session or {}).get("config") if isinstance(self._session, dict) else None
+        if isinstance(manifest, dict) and manifest.get("config_sha256") and incoming_config_sha != manifest.get("config_sha256") and isinstance(frozen_config, dict):
+            settings = dict(settings)
+            settings.update({
+                key: frozen_config.get(key, DEFAULT_SETTINGS.get(key))
+                for key in DEFAULT_SETTINGS.keys()
+            })
+            with self.lock:
+                self.state["v12_config_drift_detected"] = True
+                self.state["last_message"] = "V12 settings changed during the active session; frozen session settings remain in force until the next session."
+        settings["_v12_runtime_config_sha256"] = _v12_config_sha256(settings)
+        model_path = str(settings.get("v12_model_artifact_path") or DEFAULT_SETTINGS["v12_model_artifact_path"])
+        settings["_v12_runtime_model_sha256"] = _sha256_file(model_path)
         # Close every open paper position before the exchange session boundary,
         # even if the provider returns no quote in this cycle. This prevents a
         # stale/missing quote from allowing a position to cross the session close.
@@ -763,7 +890,8 @@ class LivePaperWorker:
                 invalid_data += 1
                 spread_pct = 0.0
                 depth["spread_pct"] = spread_pct
-            depth_ok = bool(depth.get("depth_total_qty", 0.0) > 0 and depth.get("bid1", 0.0) > 0 and depth.get("ask1", 0.0) > 0)
+                depth["book_integrity_valid"] = False
+            depth_ok = bool(depth.get("book_integrity_valid"))
             if depth_ok:
                 depth_valid += 1
                 with self.lock:
@@ -954,15 +1082,24 @@ class LivePaperWorker:
 
     def _score(self, features: Dict[str, Any], now: datetime, settings: Dict[str, Any]) -> Dict[str, Any]:
         model_profile = None
+        model_status = "disabled"
+        model_path = str(settings.get("v12_model_artifact_path") or DEFAULT_SETTINGS["v12_model_artifact_path"])
         if settings.get("v12_model_enabled", True):
-            path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
+            model_status = "unavailable"
+            path = model_path
             try:
                 if not hasattr(self, "_v12_model_profile_path") or self._v12_model_profile_path != path:
                     self._v12_model_profile = joblib.load(path)
                     self._v12_model_profile_path = path
                 model_profile = getattr(self, "_v12_model_profile", None)
-            except Exception:
+                model_status = "loaded" if model_profile is not None else "unavailable"
+            except Exception as exc:
                 model_profile = None
+                model_status = "unavailable:" + type(exc).__name__
+        model_sha256 = (str(settings.get("_v12_runtime_model_sha256") or "") if "_v12_runtime_model_sha256" in settings else _sha256_file(model_path)) if model_profile is not None else ""
+        if model_profile is not None and not model_sha256:
+            model_profile = None
+            model_status = "unavailable:artifact_missing"
         cfg = ScalperConfig(
             target_pct=_v12_gross_target_pct(settings) if settings.get("v12_mode", True) else float(settings.get("target_pct", 0.60)),
             protection_pct=float(settings.get("protection_pct", 0.18)),
@@ -980,15 +1117,36 @@ class LivePaperWorker:
             # discovered research rule (which specifically benefited from L5 opposition).
             use_l2_when_available=False,
             calibration_profile=settings.get("v12_calibration_profile"),
-            require_calibrated_probability=bool(settings.get("v12_require_calibration", False)) if settings.get("v12_mode", True) else False,
-            min_calibrated_net_probability=float(settings.get("v12_research_probability_candidate", 0.10)),
-            max_adverse_probability=float(settings.get("v12_max_adverse_probability", 0.80)),
+            # V12 must never trade an uncalibrated raw score; a stale DB setting cannot disable this guard.
+            require_calibrated_probability=bool(settings.get("v12_mode", True)),
+            min_calibrated_target_probability=float(settings.get("v12_research_probability_candidate", 0.70)),
+            max_adverse_probability=float(settings.get("v12_max_adverse_probability", 0.35)),
+            calibration_horizon_seconds=int(settings.get("v12_calibration_horizon_seconds", 300)),
+            calibration_exit_policy_id=str(settings.get("v12_calibration_exit_policy_id", "live_v12_profit_lock_l5_flip_v1")),
             v12_model_profile=model_profile,
             min_model_expected_edge_pct=float(settings.get("v12_min_model_expected_edge_pct", 0.0)),
             min_model_target_probability=float(settings.get("v12_min_model_target_probability", 0.70)),
         )
         row = pd.Series(features)
         result = score_event(row, cfg, entry_lag_bars=int(settings.get("v12_entry_latency_bars", 1)) if settings.get("v12_mode", True) else 0)
+        config_sha256 = str(settings.get("_v12_runtime_config_sha256") or _v12_config_sha256(settings))
+        result["v12_model_artifact_status"] = model_status
+        result["v12_model_sha256"] = model_sha256
+        result["v12_config_sha256"] = config_sha256
+        audit_manifest = (self._session or {}).get("audit_manifest") if isinstance(self._session, dict) else None
+        # Do not silently replace a missing configured model with the legacy heuristic.
+        if settings.get("v12_mode", True) and settings.get("v12_model_enabled", True) and model_profile is None:
+            result["direction"] = 0
+            result["rejection_reason"] = "v12_model_artifact_unavailable"
+        if settings.get("v12_mode", True) and isinstance(audit_manifest, dict):
+            if audit_manifest.get("config_sha256") and config_sha256 != audit_manifest.get("config_sha256"):
+                result["direction"] = 0
+                result["rejection_reason"] = "v12_config_hash_mismatch"
+            if audit_manifest.get("model_sha256") != model_sha256:
+                result["direction"] = 0
+                result["rejection_reason"] = "v12_model_artifact_hash_mismatch"
+        with self.lock:
+            self.state["v12_model_artifact_status"] = model_status
         # Replace the generic engine's legacy L2 labels with the actual data we have.
         micro_signal = 0.45 * float(features.get("ofi", 0.0)) + 0.35 * float(features.get("imbalance_l5", 0.0)) + 0.20 * float(features.get("microprice_edge", 0.0))
         result["l2_levels"] = 5
@@ -1031,9 +1189,10 @@ class LivePaperWorker:
             "raw_confidence": float(result.get("raw_confidence") or 0.0),
             "confidence_semantics": "model_score_0_100_not_probability",
             "calibration_status": result.get("calibration_status"),
-            "v12_p_net_positive": result.get("v12_p_net_positive"),
-            "v12_p_adverse_stop": result.get("v12_p_adverse_stop"),
-            "v12_probability_pass": bool(result.get("v12_probability_pass", True)),
+            "v12_p_target_first": result.get("v12_p_target_first"),
+            "v12_p_adverse_first": result.get("v12_p_adverse_first"),
+            "v12_target_probability_pass": bool(result.get("v12_target_probability_pass", False)),
+            "v12_model_artifact_status": result.get("v12_model_artifact_status"),
             "v12_adverse_risk_pass": bool(result.get("v12_adverse_risk_pass", True)),
             "edge_pass": bool(result.get("edge_pass")),
             "score_pass": bool(result.get("score_pass")),
@@ -1089,9 +1248,25 @@ class LivePaperWorker:
         if bool(settings.get("v12_research_gate_enabled", True)):
             side = 1 if int(result["direction"]) > 0 else -1
             max_spread = float(settings.get("v12_research_max_spread_pct", 0.15))
+            # Fail closed on invalid top-of-book data. A missing/crossed book can
+            # otherwise be converted to spread_pct=0 by _parse_depth and pass the
+            # upper-bound-only spread check as if execution were free.
+            bid1 = float(depth.get("bid1") or 0.0)
+            ask1 = float(depth.get("ask1") or 0.0)
             spread = float(depth.get("spread_pct") or 0.0)
-            if not math.isfinite(spread) or spread > max_spread:
-                return False, "v12_research_spread"
+            valid_levels = int(depth.get("valid_levels") or 0)
+            if (
+                valid_levels < 5
+                or not bool(depth.get("book_integrity_valid"))
+                or not math.isfinite(bid1)
+                or not math.isfinite(ask1)
+                or bid1 <= 0.0
+                or ask1 <= bid1
+                or not math.isfinite(spread)
+                or spread <= 0.0
+                or spread > max_spread
+            ):
+                return False, "v12_research_invalid_or_wide_quote"
             l5 = float(depth.get("imbalance_l5") or 0.0)
             if not math.isfinite(l5) or side * l5 >= 0.0:
                 return False, "v12_research_l5_opposition"
@@ -1110,8 +1285,8 @@ class LivePaperWorker:
         if settings.get("v12_mode", True) and settings.get("v12_require_calibration", False):
             if result.get("calibration_status") != "calibrated":
                 return False, "calibration_missing"
-            if not bool(result.get("v12_probability_pass")):
-                return False, "calibrated_probability"
+            if not bool(result.get("v12_target_probability_pass")):
+                return False, "calibrated_target_probability"
             if not bool(result.get("v12_adverse_risk_pass")):
                 return False, "adverse_risk"
         score = float(result.get("confidence") or 0.0)
@@ -1142,8 +1317,9 @@ class LivePaperWorker:
             "stop_price": stop,
             "confidence": score,
             "confidence_semantics": "model_score_0_100_not_probability",
-            "v12_p_net_positive": result.get("v12_p_net_positive"),
-            "v12_p_adverse_stop": result.get("v12_p_adverse_stop"),
+            "v12_p_target_first": result.get("v12_p_target_first"),
+            "v12_p_adverse_first": result.get("v12_p_adverse_first"),
+            "v12_model_artifact_status": result.get("v12_model_artifact_status"),
             "v12_calibration_status": result.get("calibration_status"),
             "expected_move_pct": float(result.get("expected_move_pct") or 0.0),
             "remaining_edge_pct": float(result.get("remaining_edge_pct") or 0.0),
@@ -1175,8 +1351,19 @@ class LivePaperWorker:
                 "direction_persistence": True,
             },
             "v12_calibration_status": result.get("calibration_status"),
-            "v12_p_net_positive": result.get("v12_p_net_positive"),
-            "v12_p_adverse_stop": result.get("v12_p_adverse_stop"),
+            "v12_p_target_first": result.get("v12_p_target_first"),
+            "v12_p_adverse_first": result.get("v12_p_adverse_first"),
+            "v12_model_artifact_status": result.get("v12_model_artifact_status"),
+            "audit_manifest": dict((self._session or {}).get("audit_manifest") or {}),
+            "metadata": {
+                "audit_manifest": dict((self._session or {}).get("audit_manifest") or {}),
+                "v12_p_target_first": result.get("v12_p_target_first"),
+                "v12_p_adverse_first": result.get("v12_p_adverse_first"),
+                "v12_calibration_status": result.get("calibration_status"),
+                "v12_model_artifact_status": result.get("v12_model_artifact_status"),
+                "v12_model_sha256": result.get("v12_model_sha256"),
+                "v12_config_sha256": result.get("v12_config_sha256"),
+            },
             "status": "OPEN",
             "notional_inr": float(settings.get("min_notional_inr", 200000.0)),
         }
@@ -1216,12 +1403,12 @@ class LivePaperWorker:
             net_now = gross_now - cost_pct - slippage_pct
 
             if bool(settings.get("v12_profit_lock_enabled", True)):
-                arm_net = float(settings.get("v12_profit_lock_arm_net_pct", 0.075))
+                trail_arm_net = float(settings.get("v12_profit_lock_arm_net_pct", 0.075))
                 trail_floor = float(settings.get("v12_profit_lock_trail_gross_pct", 0.075))
                 trail_fraction = float(settings.get("v12_profit_lock_trail_fraction", 0.25))
                 peak_gross = max(float(pos.get("peak_gross_pct") or 0.0), gross_now)
                 trail_gross = max(trail_floor, peak_gross * trail_fraction)
-                if net_now >= arm_net:
+                if net_now >= trail_arm_net:
                     if not pos.get("economic_lock_active"):
                         with self.lock:
                             self.state["economic_lock_activated"] = int(self.state.get("economic_lock_activated") or 0) + 1
@@ -1269,9 +1456,13 @@ class LivePaperWorker:
             "holding_minutes": age_min,
             "metadata": {
                 "confidence_semantics": "model_score_0_100_not_probability",
+                "audit_manifest": dict(pos.get("audit_manifest") or {}),
                 "v12_calibration_status": result.get("calibration_status") if result else pos.get("v12_calibration_status"),
-                "v12_p_net_positive": result.get("v12_p_net_positive") if result else pos.get("v12_p_net_positive"),
-                "v12_p_adverse_stop": result.get("v12_p_adverse_stop") if result else pos.get("v12_p_adverse_stop"),
+                "v12_model_sha256": result.get("v12_model_sha256") if result else (pos.get("metadata") or {}).get("v12_model_sha256"),
+                "v12_config_sha256": result.get("v12_config_sha256") if result else (pos.get("metadata") or {}).get("v12_config_sha256"),
+                "v12_p_target_first": result.get("v12_p_target_first") if result else pos.get("v12_p_target_first"),
+                "v12_p_adverse_first": result.get("v12_p_adverse_first") if result else pos.get("v12_p_adverse_first"),
+                "v12_model_artifact_status": result.get("v12_model_artifact_status") if result else pos.get("v12_model_artifact_status"),
                 "expected_stop_gross_pct": -abs(float(settings.get("protection_pct", 0.18))) if exit_reason == "STOP" else None,
                 "actual_exit_gross_pct": gross,
                 "stop_overshoot_pct": max(0.0, abs(gross) - abs(float(settings.get("protection_pct", 0.18)))) if exit_reason == "STOP" else 0.0,

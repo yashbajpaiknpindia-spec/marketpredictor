@@ -61,18 +61,23 @@ def build_model_features(s: pd.DataFrame) -> pd.DataFrame:
     x["_v12_row_id"]=np.arange(len(x),dtype=int)
     x["captured_at"]=pd.to_datetime(x["captured_at"])
     x=x.sort_values(["ticker","captured_at"]).reset_index(drop=True)
+    x["_v12_date"] = x["captured_at"].dt.date
+    group_cols = ["ticker"]
+    if "session_id" in x.columns:
+        group_cols.append("session_id")
+    group_cols.append("_v12_date")
     px=_num(x,"ltp")
-    for n in (1,3,5): x[f"ret_{n}"]=px.groupby(x.ticker).pct_change(n).fillna(0)*100
+    for n in (1,3,5): x[f"ret_{n}"]=x.groupby(group_cols, sort=False)["ltp"].pct_change(n).fillna(0)*100
     for c,d in (("range_pct",0), ("body_pct",0), ("close_location",.5), ("market_ret_1",0), ("market_ret_3",0), ("rs_1",0), ("rs_3",0),
                 ("spread_pct",0),("imbalance_l1",0),("imbalance_l5",0),("microprice_edge_pct",0),("ofi_proxy",0),("book_pressure",0),("depth_total_qty",0)):
         x[c]=_num(x,c,d)
-    vol=_num(x,"volume"); vm=vol.groupby(x.ticker).transform(lambda z:z.rolling(20,min_periods=5).median())
+    vol=_num(x,"volume"); vm=x.groupby(group_cols, sort=False)["volume"].transform(lambda z:pd.to_numeric(z,errors="coerce").fillna(0).rolling(20,min_periods=5).median())
     x["vol_ratio_20"]=(vol/vm.replace(0,np.nan)).replace([np.inf,-np.inf],np.nan).fillna(1)
-    rm=x["range_pct"].groupby(x.ticker).transform(lambda z:z.rolling(20,min_periods=5).median())
+    rm=x.groupby(group_cols, sort=False)["range_pct"].transform(lambda z:pd.to_numeric(z,errors="coerce").fillna(0).rolling(20,min_periods=5).median())
     x["range_ratio_20"]=(x.range_pct/rm.replace(0,np.nan)).replace([np.inf,-np.inf],np.nan).fillna(1)
     x["depth_log"]=np.log1p(x.depth_total_qty.clip(lower=0))
     for src,dst in (("imbalance_l5","l5_imbalance_delta"),("ofi_proxy","ofi_delta"),("microprice_edge_pct","microprice_delta"),("spread_pct","spread_delta"),("book_pressure","book_pressure_delta")):
-        x[dst]=x[src]-x.groupby("ticker")[src].shift(1).fillna(x[src])
+        x[dst]=x[src]-x.groupby(group_cols, sort=False)[src].shift(1).fillna(x[src])
     m=x.captured_at.dt.hour*60+x.captured_at.dt.minute; a=2*np.pi*m/(24*60)
     x["minute_sin"]=np.sin(a); x["minute_cos"]=np.cos(a)
     return x
@@ -81,9 +86,14 @@ def build_model_features(s: pd.DataFrame) -> pd.DataFrame:
 def _side_outcomes(s: pd.DataFrame, horizon_seconds:int, target:float, stop:float):
     """Outcome labels and timeout gross returns for LONG and SHORT."""
     x=s.sort_values(["ticker","captured_at"]).reset_index(drop=True)
+    x["_v12_date"] = x["captured_at"].dt.date
+    group_cols = ["ticker"]
+    if "session_id" in x.columns:
+        group_cols.append("session_id")
+    group_cols.append("_v12_date")
     lo=np.full(len(x),np.nan); so=np.full(len(x),np.nan); lt=np.full(len(x),np.nan); st=np.full(len(x),np.nan)
-    for _,g in x.groupby("ticker",sort=False):
-        idx=g.index.to_numpy(); t=g.captured_at.astype("int64").to_numpy(); p=_num(g,"ltp").to_numpy()
+    for _,g in x.groupby(group_cols,sort=False,dropna=False):
+        idx=g.index.to_numpy(); t=g["captured_at"].astype("datetime64[ns]").astype("int64").to_numpy(); p=_num(g,"ltp").to_numpy()
         for j,i in enumerate(idx):
             if j+1>=len(g) or not np.isfinite(p[j]) or p[j]<=0: continue
             k=np.searchsorted(t,t[j]+int(horizon_seconds*1e9),side="right")
@@ -147,22 +157,37 @@ def fit_v12_models(
     """
     x = build_model_features(snapshots)
     x = x.sort_values(["captured_at", "ticker"]).reset_index(drop=True)
-    n = max(1, min(len(x), int(len(x) * train_fraction)))
-    tr = x.iloc[:n].copy()
+    unique_times = np.sort(x["captured_at"].dropna().unique())
+    if len(unique_times) < 2:
+        raise ValueError("Need at least two distinct timestamps to fit V12 models.")
+    if not 0 < float(train_fraction) <= 1:
+        raise ValueError("train_fraction must be in (0, 1].")
+    if train_fraction >= 1:
+        tr = x.copy()
+    else:
+        cutoff_index = max(1, min(len(unique_times) - 1, int(len(unique_times) * train_fraction)))
+        cutoff = unique_times[cutoff_index]
+        tr = x[x["captured_at"] < cutoff].copy()
     economic_target_gross = float(round_trip_cost_pct + entry_slippage_pct + economic_lock_net_pct)
     economic_target_net = float(economic_lock_net_pct)
     economic_stop_net = float(-protection_pct - round_trip_cost_pct - entry_slippage_pct)
 
     # First fit a strictly earlier sub-window for threshold selection.
     # The final 30% of TRAIN is validation; the blind segment is never touched.
-    vcut = max(1, int(len(tr) * 0.70))
+    train_times = np.sort(tr["captured_at"].dropna().unique())
+    if len(train_times) >= 2:
+        vcut = max(1, min(len(train_times) - 1, int(len(train_times) * 0.70)))
+        validation_cutoff = train_times[vcut]
+    else:
+        vcut = len(train_times)
+        validation_cutoff = None
     direction_probability_threshold = float(direction_probability_threshold)
     direction_margin = float(direction_margin)
     min_expected_net_edge_pct = float(min_expected_net_edge_pct)
 
-    if vcut < len(tr):
-        fit_part = tr.iloc[:vcut].copy()
-        val = tr.iloc[vcut:].copy()
+    if validation_cutoff is not None and vcut < len(train_times):
+        fit_part = tr[tr["captured_at"] < validation_cutoff].copy()
+        val = tr[tr["captured_at"] >= validation_cutoff].copy()
         flo, fso, flg, fsg = _side_outcomes(fit_part, horizon_seconds, economic_target_gross, protection_pct)
         fvalid = np.isfinite(flo) & np.isfinite(fso) & (
             pd.to_numeric(fit_part.get("signal_direction", 0), errors="coerce").fillna(0).to_numpy() != 0

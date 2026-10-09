@@ -812,7 +812,7 @@ def _scalper_fetch_quotes(scrip_codes: List[str], record_diag: bool = True) -> D
         # Request budget: /market/quotes/full documents an embedded market_depth. When it already carries a
         # complete 5-level ladder for >=90% of the batch, the second (/market/quotes/mkt) call adds nothing,
         # so skip it (-33% quote calls). When full has no usable depth, ask /mkt ONLY for the codes that lack it.
-        missing = [c for c in chunk if extract_depth_levels(full.get(c) or {})['valid_levels'] < 5]
+        missing = [c for c in chunk if not extract_depth_levels(full.get(c) or {}).get('book_integrity_valid', False)]
         mkt_skipped = len(missing) <= 0.1 * len(chunk)
         depth = {}
         if mkt_skipped:
@@ -833,7 +833,15 @@ def _scalper_fetch_quotes(scrip_codes: List[str], record_diag: bool = True) -> D
                                'full_row_keys': sorted(row.keys())[:30]}
             ex_mkt = extract_depth_levels(depth_row)
             ex_full = extract_depth_levels(row)
-            if ex_mkt['valid_levels'] >= ex_full['valid_levels'] and ex_mkt['shape'] != 'none':
+            if ex_mkt.get('book_integrity_valid') and (
+                not ex_full.get('book_integrity_valid') or ex_mkt['valid_levels'] >= ex_full['valid_levels']
+            ):
+                best, src = ex_mkt, 'mkt'
+                src_obj = depth_row.get('market_depth') if isinstance(depth_row.get('market_depth'), dict) else depth_row
+            elif ex_full.get('book_integrity_valid'):
+                best, src = ex_full, 'full'
+                src_obj = row.get('market_depth') if isinstance(row.get('market_depth'), dict) else row
+            elif ex_mkt['valid_levels'] >= ex_full['valid_levels'] and ex_mkt['shape'] != 'none':
                 best, src = ex_mkt, 'mkt'
                 src_obj = depth_row.get('market_depth') if isinstance(depth_row.get('market_depth'), dict) else depth_row
             elif ex_full['shape'] != 'none':
@@ -849,7 +857,7 @@ def _scalper_fetch_quotes(scrip_codes: List[str], record_diag: bool = True) -> D
                 shapes[f"{src}:{best['shape']}"] = shapes.get(f"{src}:{best['shape']}", 0) + 1
             else:
                 row['market_depth'] = None
-            row['_depth_endpoint_ok'] = bool(best and best['valid_levels'] > 0)
+            row['_depth_endpoint_ok'] = bool(best and best.get('book_integrity_valid'))
             row['_depth_levels_valid'] = int(best['valid_levels']) if best else 0
             if row['_depth_endpoint_ok']:
                 valid_depth += 1
@@ -1134,7 +1142,7 @@ def _scalper_persist_trade(trade: Dict[str, Any]) -> None:
                 (trade_key,session_id,ticker,scrip_code,side,entry_time,entry_price,target_price,stop_price,exit_time,exit_price,status,confidence,expected_move_pct,remaining_edge_pct,l2_levels,entry_reason,notional_inr,gross_pct,net_pct,net_pnl_inr,exit_reason,holding_minutes,metadata,updated_at)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
                 ON CONFLICT (trade_key) DO UPDATE SET
-                  exit_time=EXCLUDED.exit_time, exit_price=EXCLUDED.exit_price, status=EXCLUDED.status, gross_pct=EXCLUDED.gross_pct, net_pct=EXCLUDED.net_pct, net_pnl_inr=EXCLUDED.net_pnl_inr, exit_reason=EXCLUDED.exit_reason, holding_minutes=EXCLUDED.holding_minutes, updated_at=NOW()
+                  exit_time=EXCLUDED.exit_time, exit_price=EXCLUDED.exit_price, status=EXCLUDED.status, gross_pct=EXCLUDED.gross_pct, net_pct=EXCLUDED.net_pct, net_pnl_inr=EXCLUDED.net_pnl_inr, exit_reason=EXCLUDED.exit_reason, holding_minutes=EXCLUDED.holding_minutes, metadata=EXCLUDED.metadata, updated_at=NOW()
             """, (
                 trade.get('trade_key'), trade.get('session_id'), trade.get('ticker'), trade.get('scrip_code'), trade.get('side'), trade.get('entry_time'), trade.get('entry_price'),
                 trade.get('target_price'), trade.get('stop_price'), trade.get('exit_time'), trade.get('exit_price'), trade.get('status','OPEN'), trade.get('confidence'),

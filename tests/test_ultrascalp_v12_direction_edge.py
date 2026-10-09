@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from research.scalper.v12_models import fit_v12_models, apply_v12_models
+from research.scalper.v12_models import fit_v12_models, apply_v12_models, build_model_features, _side_outcomes
 
 
 def _fixture(n=800):
@@ -41,3 +41,26 @@ def test_apply_v12_models_preserves_input_row_alignment():
     assert list(a.index) == list(range(100))
     assert a["v12_model_direction"].notna().all()
     assert a["v12_model_expected_net_edge_pct"].notna().all()
+
+
+def test_features_and_outcome_labels_do_not_cross_session_boundary():
+    x = pd.DataFrame({
+        "session_id": [1, 2, 2],
+        "ticker": ["AAA", "AAA", "AAA"],
+        "captured_at": pd.to_datetime([
+            "2026-10-07 15:29:50",
+            "2026-10-07 15:30:00",
+            "2026-10-07 15:30:30",
+        ]),
+        "ltp": [100.0, 101.0, 101.2],
+        "signal_direction": [1, 1, 1],
+        "volume": [100, 100, 100],
+    })
+    features = build_model_features(x)
+    second_session_first = features[(features.session_id == 2)].iloc[0]
+    assert second_session_first["ret_1"] == 0.0
+    lo, so, _, _ = _side_outcomes(
+        features, horizon_seconds=30, target=0.1, stop=0.1
+    )
+    # The first row cannot use the next session's price as its outcome.
+    assert np.isnan(lo[0]) and np.isnan(so[0])

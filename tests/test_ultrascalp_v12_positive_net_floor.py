@@ -39,5 +39,5 @@ def test_live_worker_defaults_match_economic_policy_contract():
     text = LIVE_PATH.read_text()
     assert '"v12_min_model_target_probability": 0.70' in text
     assert '"v12_model_enabled": True' in text
-    assert '"v12_profit_lock_trail_gross_pct": 0.30' in text
+    assert '"v12_profit_lock_trail_gross_pct": 0.075' in text
     assert 'settings.get("v12_economic_lock_net_pct", 0.20)' in text

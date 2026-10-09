@@ -60,5 +60,13 @@
     8019,
     8019
   ],
-  "train_rows": 104179
+  "train_rows": 104179,
+  "status": "LEGACY_PROFILE_REJECTED_FOR_LIVE_POLICY",
+  "use_for_live": false,
+  "rejection_reasons": [
+    "Legacy v1 schema does not record target_gross_pct, entry_slippage_pct, or exit_policy_id.",
+    "This profile records protection_pct=0.22, while the current live V12 policy uses 0.18.",
+    "Its positive_rates semantics are not guaranteed to match target-first barrier probability or live-policy net profitability.",
+    "The v2 scorer intentionally rejects this profile; do not re-enable it by copying this JSON into settings."
+  ]
 }
