@@ -5050,7 +5050,9 @@ async function importScalperSessionData(file) {
       const m=j.metadata||{}, label=j.label||j.source_label||m.label||'Session';
       if(panel) panel.textContent=(j.stage||j.status||'Importing…')+' · '+label+(j.progress_pct!=null?' · '+Number(j.progress_pct).toFixed(1)+'%':'')+(j.status==='completed'?' · Seen '+Number(j.rows_seen||0).toLocaleString('en-IN')+' · Added '+Number(j.rows_inserted||0).toLocaleString('en-IN')+' · Duplicates skipped '+Number(j.duplicates||0).toLocaleString('en-IN'):'');
       if(j.status==='completed'||j.status==='error'){
-        clearInterval(importScalperSessionData._timer);importScalperSessionData._timer=null;await loadScalperSessions();
+        clearInterval(importScalperSessionData._timer);importScalperSessionData._timer=null;
+        if(_scalperSessionsLoadInFlight){try{await _scalperSessionsLoadInFlight;}catch(_refreshWaitError){}}
+        await loadScalperSessions(true);
         showToast('UltraScalp session import',j.message||j.error||'Import finished.',j.status==='completed'?'success':'error');
       }
     };
