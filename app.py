@@ -1734,54 +1734,65 @@ def _run_scalper_session_import_job(job_id: str, path: str, filename: str) -> No
         if conn is None: raise RuntimeError('Database unavailable.')
         try:
             _scalper_schema_required(conn)
+            config={'imported':True,'source_filename':filename,'import_fingerprint':meta['sha256'],'source_type':'L5_SNAPSHOT_CSV','capture_interval_seconds':meta['interval'].get('median_seconds'),'capture_interval_label':meta['interval'].get('label'),'duration_seconds':meta['duration_seconds'],'duration_label':meta['duration_label'],'label':meta['label'],'universe_symbols':meta['tickers'],'import_format':'additive_deduplicating_v2'}
+            existing_session_rows=0
             with conn.cursor() as cur:
                 cur.execute("SELECT id FROM scalper_live_sessions WHERE COALESCE(config_json->>'import_fingerprint','')=%s LIMIT 1",(meta['sha256'],))
-                existing = cur.fetchone()
+                existing=cur.fetchone()
             if existing:
                 existing_id=int(existing[0])
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("SELECT id,status,COUNT(*) AS snapshot_rows,MIN(captured_at) AS first_ts,MAX(captured_at) AS last_ts,COUNT(DISTINCT ticker) AS ticker_count FROM scalper_live_snapshots WHERE session_id=%s GROUP BY id,status", (existing_id,))
+                    cur.execute("""
+                        SELECT s.id,s.status,COUNT(sn.id) AS snapshot_rows,
+                               MIN(sn.captured_at) AS first_ts,MAX(sn.captured_at) AS last_ts,
+                               COUNT(DISTINCT sn.ticker) AS ticker_count
+                          FROM scalper_live_sessions s
+                          LEFT JOIN scalper_live_snapshots sn ON sn.session_id=s.id
+                         WHERE s.id=%s
+                         GROUP BY s.id,s.status
+                    """,(existing_id,))
                     existing_stats=cur.fetchone()
                 existing_status=str(existing_stats.get('status') or '').lower() if existing_stats else ''
-                if existing_stats and existing_status in ('error','importing'):
-                    repair_result={
-                        'rows_seen':int(existing_stats.get('snapshot_rows') or 0),
-                        'rows_inserted':int(existing_stats.get('snapshot_rows') or 0),
-                        'duplicates_skipped':int(existing_stats.get('snapshot_rows') or 0),
-                        'conflicting_existing_keys':0,
-                        'repaired_previous_import':True,
-                        **meta,
-                    }
+                existing_session_rows=int(existing_stats.get('snapshot_rows') or 0) if existing_stats else 0
+                if existing_stats and existing_status in ('error','importing','running'):
+                    # Re-run the file against its existing session ledger. Previously committed
+                    # batches are naturally skipped by the same exact-row dedupe checks below.
+                    session_id=existing_id
                     with conn:
                         with conn.cursor() as cur:
                             cur.execute("""UPDATE scalper_live_sessions SET
-                                session_date=%s,started_at=%s,finished_at=%s,status='completed',
+                                session_date=%s,started_at=%s,finished_at=NULL,status='importing',
                                 snapshot_count=%s,stored_snapshot_count=%s,universe_count=%s,mapped_count=%s,
-                                result_json=%s,config_json=config_json || %s::jsonb,last_heartbeat_at=%s,last_error=NULL
+                                result_json='{}'::jsonb,config_json=config_json || %s::jsonb,
+                                last_heartbeat_at=%s,last_error=NULL
                                 WHERE id=%s""",
-                                (meta['date'],meta['first_ts'],meta['last_ts'],int(existing_stats.get('snapshot_rows') or 0),
-                                 int(existing_stats.get('snapshot_rows') or 0),int(meta['universe_count']),int(meta['universe_count']),
-                                 json.dumps(_scalper_json_safe(repair_result)),
-                                 json.dumps({'repaired_previous_import':True,'source_label':meta['label']}),
+                                (meta['date'],meta['first_ts'],int(meta['row_count']),existing_session_rows,
+                                 int(meta['universe_count']),int(meta['universe_count']),json.dumps(config),
                                  datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),existing_id))
-                    _scalper_import_job_set(job_id,status='completed',stage='repaired prior failed import — no new rows added',progress_pct=100.0,
-                        duplicate=True,duplicate_session_id=existing_id,metadata=meta,label=meta['label'],
-                        rows_seen=int(existing_stats.get('snapshot_rows') or 0),rows_inserted=0,duplicates=int(existing_stats.get('snapshot_rows') or 0),conflicts=0,
-                        message=f'Existing session #{existing_id} was repaired. No new database rows were added.')
+                    _scalper_import_job_set(job_id,stage='resuming prior import',progress_pct=2.0,
+                        session_id=existing_id,metadata=_scalper_json_safe(meta),source_label=meta['label'],
+                        rows_inserted=existing_session_rows)
+                else:
+                    # A completed import with the same content hash is already represented in history.
+                    _scalper_import_job_set(job_id,status='completed',stage='duplicate file — already imported',
+                        progress_pct=100.0,duplicate=True,duplicate_session_id=existing_id,
+                        metadata=_scalper_json_safe(meta),label=meta['label'],rows_seen=int(meta['row_count']),
+                        rows_inserted=existing_session_rows,duplicates=int(meta['row_count']),conflicts=0,
+                        message='This exact file already has a session-history record. No duplicate rows were added.')
                     return
-                _scalper_import_job_set(job_id,status='completed',stage='duplicate file — nothing imported',progress_pct=100.0,duplicate=True,duplicate_session_id=existing_id,metadata=meta,label=meta['label'],message='This exact file was already imported. No database rows were added.')
-                return
-            config={'imported':True,'source_filename':filename,'import_fingerprint':meta['sha256'],'source_type':'L5_SNAPSHOT_CSV','capture_interval_seconds':meta['interval'].get('median_seconds'),'capture_interval_label':meta['interval'].get('label'),'duration_seconds':meta['duration_seconds'],'duration_label':meta['duration_label'],'label':meta['label'],'universe_symbols':meta['tickers'],'import_format':'additive_deduplicating_v1'}
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute("""INSERT INTO scalper_live_sessions
-                      (session_date,started_at,finished_at,status,provider,depth_levels,universe_count,mapped_count,snapshot_count,stored_snapshot_count,
-                       signal_count,raw_direction_count,edge_pass_count,score_pass_count,l2_agreement_count,entry_reject_count,paper_trade_count,realized_net_pnl_inr,
-                       config_json,result_json,last_heartbeat_at,last_error)
-                      VALUES (%s,%s,%s,'importing','Imported session',5,%s,%s,0,0,0,0,0,0,0,0,0,0,%s,%s,%s,NULL) RETURNING id""",
-                      (meta['date'],meta['first_ts'],meta['last_ts'],meta['universe_count'],meta['universe_count'],json.dumps(config),json.dumps({}),datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)))
-                    session_id=int(cur.fetchone()[0])
-            _scalper_import_job_set(job_id,stage='importing snapshots',progress_pct=3.0,session_id=session_id,metadata=meta,source_label=meta['label'])
+            else:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""INSERT INTO scalper_live_sessions
+                          (session_date,started_at,finished_at,status,provider,depth_levels,universe_count,mapped_count,snapshot_count,stored_snapshot_count,
+                           signal_count,raw_direction_count,edge_pass_count,score_pass_count,l2_agreement_count,entry_reject_count,paper_trade_count,realized_net_pnl_inr,
+                           config_json,result_json,last_heartbeat_at,last_error)
+                          VALUES (%s,%s,%s,'importing','Imported session',5,%s,%s,0,0,0,0,0,0,0,0,0,0,%s,%s,%s,NULL) RETURNING id""",
+                          (meta['date'],meta['first_ts'],meta['last_ts'],meta['universe_count'],meta['universe_count'],json.dumps(config),json.dumps({}),datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)))
+                        session_id=int(cur.fetchone()[0])
+            _scalper_import_job_set(job_id,stage='importing snapshots',progress_pct=3.0,
+                session_id=session_id,metadata=_scalper_json_safe(meta),source_label=meta['label'],
+                rows_inserted=existing_session_rows)
             import gzip
             opener=gzip.open if path.lower().endswith(('.gz','.gzip')) else open
             sql_rows=[]; total_seen=inserted_total=duplicate_total=conflict_total=0; last_progress=0.0
@@ -1852,21 +1863,31 @@ def _run_scalper_session_import_job(job_id: str, path: str, filename: str) -> No
                               AND COALESCE(s.ask_prices,'[]'::jsonb)=COALESCE(t.ask_prices,'[]'::jsonb)
                               AND COALESCE(s.ask_qtys,'[]'::jsonb)=COALESCE(t.ask_qtys,'[]'::jsonb))""",(session_id,))
                         inserted_total+=int(cur.rowcount or 0); duplicate_total+=int(min(dup_exact,batch_n)); conflict_total+=max(0,int(key_exists)-int(dup_exact)); total_seen+=batch_n; conn.commit()
-            result={**meta,'rows_seen':total_seen,'rows_inserted':inserted_total,'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total,'dedupe_rule':'captured_at + ticker + LTP + volume + displayed L5 prices/quantities'}
+            total_stored=existing_session_rows+inserted_total
+            result={**meta,'rows_seen':total_seen,'rows_inserted':total_stored,'rows_inserted_this_attempt':inserted_total,
+                    'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total,
+                    'dedupe_rule':'captured_at + ticker + LTP + volume + displayed L5 prices/quantities'}
             with conn:
                 with conn.cursor() as cur:
-                    if inserted_total == 0:
-                        cur.execute("DELETE FROM scalper_live_sessions WHERE id=%s",(session_id,))
-                    else:
-                        cur.execute("""UPDATE scalper_live_sessions SET finished_at=%s,status='completed',snapshot_count=%s,stored_snapshot_count=%s,
-                          universe_count=%s,mapped_count=%s,result_json=%s,config_json=config_json || %s::jsonb,
-                          last_heartbeat_at=%s,last_error=NULL WHERE id=%s""",
-                          (meta['last_ts'],total_seen,inserted_total,meta['universe_count'],meta['universe_count'],json.dumps(_scalper_json_safe(result)),
-                           json.dumps({'rows_seen':total_seen,'rows_inserted':inserted_total,'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total}),
-                           datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),session_id))
-            _scalper_import_job_set(job_id,status='completed',stage='complete' if inserted_total else 'duplicate rows — nothing added',progress_pct=100.0,
-              session_id=None if inserted_total==0 else session_id,rows_seen=total_seen,rows_inserted=inserted_total,duplicates=duplicate_total,conflicts=conflict_total,metadata=meta,label=meta['label'],
-              message=('Every snapshot was already present; no database rows were added.' if inserted_total==0 else 'Session imported additively; existing identical snapshots were skipped.'))
+                    # Always keep a session-history row, even when every snapshot was already
+                    # present in another session. A zero-row import is still an auditable import.
+                    cur.execute("""UPDATE scalper_live_sessions SET finished_at=%s,status='completed',snapshot_count=%s,stored_snapshot_count=%s,
+                      universe_count=%s,mapped_count=%s,result_json=%s,config_json=config_json || %s::jsonb,
+                      last_heartbeat_at=%s,last_error=NULL WHERE id=%s""",
+                      (meta['last_ts'],total_seen,total_stored,meta['universe_count'],meta['universe_count'],json.dumps(_scalper_json_safe(result)),
+                       json.dumps({'rows_seen':total_seen,'rows_inserted':total_stored,'rows_inserted_this_attempt':inserted_total,
+                                   'duplicates_skipped':duplicate_total,'conflicting_existing_keys':conflict_total}),
+                       datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),session_id))
+            app.logger.info("[SCALPER_IMPORT] completed session_id=%s rows_seen=%s rows_stored=%s rows_added_this_attempt=%s duplicates=%s conflicts=%s resumed=%s",
+                            session_id,total_seen,total_stored,inserted_total,duplicate_total,conflict_total,bool(existing_session_rows))
+            _scalper_import_job_set(job_id,status='completed',
+              stage='complete' if inserted_total else ('complete — previously stored rows reconciled' if total_stored else 'complete — snapshots already present'),
+              progress_pct=100.0,session_id=session_id,rows_seen=total_seen,rows_inserted=total_stored,
+              rows_inserted_this_attempt=inserted_total,duplicates=duplicate_total,conflicts=conflict_total,
+              metadata=_scalper_json_safe(meta),label=meta['label'],
+              message=('Session imported additively; existing identical snapshots were skipped.' if inserted_total else
+                       (f'Import reconciled with {total_stored:,} rows already stored for this session; no additional rows were needed.' if total_stored else
+                        'Session recorded in history; all snapshots already existed elsewhere, so no duplicate snapshot rows were added.')))
         finally:
             conn.close()
     except Exception as exc:
