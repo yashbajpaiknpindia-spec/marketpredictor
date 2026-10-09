@@ -3179,7 +3179,7 @@ async function deleteScalperSession(id, button){
   _scalperSessionOperationActive='delete';
   if(button) button.disabled=true;
   showScalperSessionOperationStatus('working','Deleting session #' + id,
-    'Waiting for the server to delete this session and its linked snapshot/trade rows…',50,
+    'Waiting for the server to delete this session and its linked snapshot/trade rows…',null,
     'Deletion in progress — unrelated MarketPredictor records are not touched.');
   try{
     const d=await _scalperFetchJson('/api/scalper/live/session/' + id,{method:'DELETE'});
