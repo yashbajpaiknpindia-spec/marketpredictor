@@ -280,6 +280,25 @@
   .danger-btn:hover:not(:disabled) { border-color: var(--red); box-shadow: var(--shadow-glow-r); }
   .hist-row-check, #histSelectAllPaper { width:15px; height:15px; cursor:pointer; accent-color: var(--red); }
   .cost-note { font-size:12px; color:var(--text2); line-height:1.6; margin-bottom:18px; }
+  .sc-session-operation { display:none; margin:12px 16px 14px; padding:14px 16px; border:1px solid var(--border2); border-radius:12px; background:var(--panel, var(--bg)); color:var(--text); box-shadow:var(--shadow-sm, none); }
+  .sc-session-operation[data-state="working"] { border-color:var(--blue, #3984ff); }
+  .sc-session-operation[data-state="success"] { border-color:var(--green, #299764); }
+  .sc-session-operation[data-state="error"] { border-color:var(--red, #d94b4b); }
+  .sc-session-operation[data-state="warning"] { border-color:var(--amber, #c08a25); }
+  .sc-session-op-head { display:flex; align-items:flex-start; gap:10px; }
+  .sc-session-op-icon { font-size:19px; line-height:1.3; flex:0 0 auto; }
+  .sc-session-op-copy { flex:1; min-width:0; }
+  .sc-session-op-title { font-weight:700; font-size:13px; line-height:1.4; }
+  .sc-session-op-detail { margin-top:3px; color:var(--text2); font-size:12px; line-height:1.55; overflow-wrap:anywhere; white-space:pre-line; }
+  .sc-session-op-progress-line { display:flex; align-items:center; gap:10px; margin-top:11px; }
+  .sc-session-op-track { height:7px; flex:1; min-width:50px; border-radius:99px; overflow:hidden; background:var(--border2); }
+  .sc-session-op-fill { height:100%; width:0%; border-radius:99px; background:var(--blue, #3984ff); transition:width .18s ease; }
+  .sc-session-operation[data-state="success"] .sc-session-op-fill { background:var(--green, #299764); }
+  .sc-session-operation[data-state="error"] .sc-session-op-fill { background:var(--red, #d94b4b); }
+  .sc-session-op-pct { min-width:42px; text-align:right; color:var(--text2); font-size:11px; font-variant-numeric:tabular-nums; }
+  .sc-session-op-stats { color:var(--text2); font-size:11px; line-height:1.5; margin-top:8px; overflow-wrap:anywhere; }
+  .sc-session-op-dismiss { margin-top:8px; padding:4px 8px; border-radius:6px; border:1px solid var(--border2); color:var(--text2); background:transparent; font-size:11px; cursor:pointer; }
+
   .trade-grid { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:12px; margin-bottom:16px; }
   .field { background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; transition: border-color .15s var(--ease); }
   .field:focus-within { border-color: var(--blue); }
@@ -503,7 +522,7 @@
 <button type="button" class="tab-btn" id="tabRapidForensics" onclick="switchTab('rapidForensics')">⚡ Rapid Scan</button>
 <button type="button" class="tab-btn" id="tabStrategyDashboard" onclick="switchTab('strategyDashboard')">Strategy Dashboard</button>
 <button type="button" class="tab-btn" id="tabHistory" onclick="switchTab('history')">Trade History</button>
-<button type="button" class="tab-btn" id="tabExport" onclick="switchTab('export')">Export Data</button> <button type="button" class="tab-btn" id="tabImportSession" onclick="document.getElementById('scalperSessionImportInput').click()" title="Import an UltraScalp L5 session additively">⬆ Import Session</button>
+<button type="button" class="tab-btn" id="tabExport" onclick="switchTab('export')">Export Data</button> <button type="button" class="tab-btn" id="tabImportSession" onclick="prepareScalperSessionImport()" title="Import an UltraScalp L5 session additively">⬆ Import Session</button>
 <a class="tab-btn" href="/market-data" style="text-decoration:none;display:inline-flex;align-items:center;">📈 Strategy Evidence</a>
 <a class="tab-btn storage-tab" href="/storage" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" aria-label="Database storage" title="Database storage"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v7c0 1.66 3.13 3 7 3s7-1.34 7-3V5"></path><path d="M5 12v7c0 1.66 3.13 3 7 3s7-1.34 7-3v-7"></path></svg>Storage</a>
 <button type="button" class="tab-btn ai-copilot-tab" id="tabAICopilot" onclick="switchTab('aiCopilot')" style="display:none;">🤖 AI Copilot</button>
@@ -521,6 +540,22 @@
 <button type="button" onclick="switchFromMore('trading')">⚡ Trading Automation</button>
 </div>
 </div>
+</div>
+
+<div id="scalperSessionOperationStatus" class="sc-session-operation" data-state="info" role="status" aria-live="polite" aria-atomic="false">
+  <div class="sc-session-op-head">
+    <span class="sc-session-op-icon" id="scalperSessionOpIcon" aria-hidden="true">ℹ️</span>
+    <div class="sc-session-op-copy">
+      <div class="sc-session-op-title" id="scalperSessionOpTitle">Session data operations</div>
+      <div class="sc-session-op-detail" id="scalperSessionOpDetail">Import and delete progress will appear here.</div>
+    </div>
+  </div>
+  <div class="sc-session-op-progress-line" id="scalperSessionOpProgressLine" style="display:none;">
+    <div class="sc-session-op-track"><div class="sc-session-op-fill" id="scalperSessionOpFill"></div></div>
+    <span class="sc-session-op-pct" id="scalperSessionOpPct"></span>
+  </div>
+  <div class="sc-session-op-stats" id="scalperSessionOpStats"></div>
+  <button type="button" class="sc-session-op-dismiss" id="scalperSessionOpDismiss" onclick="dismissScalperSessionOperationStatus()" style="display:none;">Dismiss status</button>
 </div>
 <div id="scannerView" style="display:none;">
 <div class="controls">
@@ -1802,11 +1837,11 @@ Major difference: Trading Automation uses the locked AI day/week scan and then a
 </div>
 <div class="track-actions">
   <button class="secondary-btn" onclick="startFullAppDataBackup()">⬇ Export all application data</button>
-  <button class="secondary-btn" onclick="document.getElementById('scalperSessionImportInput').click()">⬆ Import L5 session data</button>
+  <button class="secondary-btn" onclick="prepareScalperSessionImport()">⬆ Import L5 session data</button>
   <input id="scalperSessionImportInput" type="file" accept=".csv,.csv.gz,.csv.gzip,.gz,.gzip,text/csv,application/gzip" style="display:none;" onchange="importScalperSessionData(this.files[0])"/>
 </div>
 <div class="cost-note" id="appDataBackupPanel" style="display:none;margin-top:8px;"></div>
-<div class="cost-note" id="scalperSessionImportPanel" style="display:none;margin-top:8px;"></div>
+
 <div class="cost-note" id="exportNote">The manifest loads from lightweight table metadata first. Summary statistics are fetched separately in the background. The canonical full backup uses the disk-backed asynchronous backup worker. Replay forensics has a separate run-level export.</div>
 <div class="acc-summary" id="exportSummary" style="display:none;">
 <div class="scard"><div class="sval b" id="exportTables">—</div><div class="slbl">Tables included</div></div>
@@ -3124,7 +3159,7 @@ async function loadScalperSessions(force=false){
       const period=_scalperSessionLabel(r,cfg);
 
       const source=cfg.imported?'Imported · additive':(r.provider||'Live capture');
-      const actions='<a class="secondary-btn" href="/api/scalper/live/export/snapshots.csv?session_id='+id+'" download>Snapshots</a> <a class="secondary-btn" href="/api/scalper/live/export/trades.csv?session_id='+id+'" download>Trades</a> '+(canDelete?'<button class="secondary-btn danger-btn" type="button" onclick="deleteScalperSession('+id+')">🗑 Delete</button>':'<button class="secondary-btn" type="button" disabled>In progress</button>');
+      const actions='<a class="secondary-btn" href="/api/scalper/live/export/snapshots.csv?session_id='+id+'" download>Snapshots</a> <a class="secondary-btn" href="/api/scalper/live/export/trades.csv?session_id='+id+'" download>Trades</a> '+(canDelete?'<button class="secondary-btn danger-btn" type="button" onclick="deleteScalperSession('+id+',this)">🗑 Delete</button>':'<button class="secondary-btn" type="button" disabled>In progress</button>');
       return '<tr><td><strong>#'+id+'</strong><br><span class="small">'+escapeHtml(period)+'</span><br><span class="small muted">'+escapeHtml(source)+'</span></td><td>'+Number(r.universe_count||0).toLocaleString('en-IN')+'</td><td><strong>'+rowsN.toLocaleString('en-IN')+'</strong></td><td>'+scalperFormatBytes(r.estimated_db_bytes||0)+'</td><td>'+escapeHtml(r.status||'—')+(status==='running'?(r.live?' · <b>LIVE</b>':' · <i>stale</i>'):'')+'</td><td>'+actions+'</td></tr>';
     }).join(''):'<tr><td colspan="6">No scalper sessions stored.</td></tr>';
     _scalperSessionsLastLoadedAt=Date.now();
@@ -3134,13 +3169,40 @@ async function loadScalperSessions(force=false){
   })();
   return _scalperSessionsLoadInFlight;
 }
-async function deleteScalperSession(id){
-  if(!confirm(`Delete UltraScalp session #${id}? This permanently removes its stored snapshots and paper trades from the scalper tables. Other MarketPredictor data is not touched.`)) return;
+async function deleteScalperSession(id, button){
+  if (_scalperSessionOperationActive) {
+    showScalperSessionOperationStatus('warning','Another session operation is running',
+      'Wait for the current import or deletion to finish before starting another operation.',null,'');
+    return;
+  }
+  if(!confirm('Delete UltraScalp session #' + id + '? This permanently removes its stored snapshots and paper trades from the scalper tables. Other MarketPredictor data is not touched.')) return;
+  _scalperSessionOperationActive='delete';
+  if(button) button.disabled=true;
+  showScalperSessionOperationStatus('working','Deleting session #' + id,
+    'Waiting for the server to delete this session and its linked snapshot/trade rows…',50,
+    'Deletion in progress — unrelated MarketPredictor records are not touched.');
   try{
-    const d=await _scalperFetchJson(`/api/scalper/live/session/${id}`,{method:'DELETE'});
-    scalperNotify('UltraScalp data deleted',`Session #${id}: ${Number(d.deleted_snapshot_count||0).toLocaleString('en-IN')} snapshots removed.`);
-    await loadScalperSessions(true); await loadScalperLive(); await scalperRefreshLiveEstimate();
-  }catch(e){showToast('Delete scalper session',e.message||String(e),'error');}
+    const d=await _scalperFetchJson('/api/scalper/live/session/' + id,{method:'DELETE'});
+    if(!d || d.ok===false) throw new Error((d&&d.error)||'The server did not confirm deletion.');
+    await loadScalperSessions(true);
+    await loadScalperLive();
+    try { await scalperRefreshLiveEstimate(); }
+    catch(estimateError) { console.warn('Storage estimate refresh after session deletion failed:',estimateError); }
+    showScalperSessionOperationStatus('success','Session #' + id + ' deleted',
+      'The server confirmed deletion. The session history has been refreshed.',
+      100,
+      Number(d.deleted_snapshot_count||0).toLocaleString('en-IN')+' snapshots · '+
+      Number(d.deleted_trade_count||0).toLocaleString('en-IN')+' paper trades · '+
+      Number(d.deleted_session_rows||0).toLocaleString('en-IN')+' session record(s) removed.');
+    showToast('Delete scalper session','Session #'+id+' deleted successfully.', 'success');
+  }catch(e){
+    showScalperSessionOperationStatus('error','Could not delete session #' + id,
+      e.message||String(e),null,'Nothing is reported as deleted unless the server confirms it.');
+    showToast('Delete scalper session',e.message||String(e),'error');
+  }finally{
+    _scalperSessionOperationActive=null;
+    if(button) button.disabled=false;
+  }
 }
 
 let _scalperLiveLoadInFlight=null;
@@ -5033,33 +5095,195 @@ function downloadFullAppDataBackup(jobId) {
   window.location.href='/api/app-data/export/download/'+encodeURIComponent(jobId);
 }
 
-async function importScalperSessionData(file) {
-  if (!file) return;
-  const panel=document.getElementById('scalperSessionImportPanel');
-  if (panel){panel.style.display='block';panel.textContent='Uploading session for validation…';}
-  const fd=new FormData(); fd.append('session',file,file.name);
-  try{
-    const res=await fetch('/api/scalper/live/import/session',{method:'POST',body:fd});
-    const data=await res.json();
-    if(!res.ok||data.ok===false) throw new Error(data.error||'Could not start session import');
-    if(importScalperSessionData._timer) clearInterval(importScalperSessionData._timer);
-    const poll=async()=>{
-      const rr=await fetch('/api/scalper/live/import/status/'+encodeURIComponent(data.job_id),{cache:'no-store'});
-      const j=await rr.json();
-      if(!rr.ok||j.ok===false) throw new Error(j.error||'Session import status failed');
-      const m=j.metadata||{}, label=j.label||j.source_label||m.label||'Session';
-      if(panel) panel.textContent=(j.stage||j.status||'Importing…')+' · '+label+(j.progress_pct!=null?' · '+Number(j.progress_pct).toFixed(1)+'%':'')+(j.status==='completed'?' · Seen '+Number(j.rows_seen||0).toLocaleString('en-IN')+' · Added '+Number(j.rows_inserted||0).toLocaleString('en-IN')+' · Duplicates skipped '+Number(j.duplicates||0).toLocaleString('en-IN'):'');
-      if(j.status==='completed'||j.status==='error'){
-        clearInterval(importScalperSessionData._timer);importScalperSessionData._timer=null;
-        if(_scalperSessionsLoadInFlight){try{await _scalperSessionsLoadInFlight;}catch(_refreshWaitError){}}
-        await loadScalperSessions(true);
-        showToast('UltraScalp session import',j.message||j.error||'Import finished.',j.status==='completed'?'success':'error');
+let _scalperSessionOperationActive=null;
+
+function showScalperSessionOperationStatus(state,title,detail,progress,stats){
+  const panel=document.getElementById('scalperSessionOperationStatus');
+  if(!panel) return;
+  panel.style.display='block';
+  panel.dataset.state=state||'info';
+  const icon=document.getElementById('scalperSessionOpIcon');
+  const titleNode=document.getElementById('scalperSessionOpTitle');
+  const detailNode=document.getElementById('scalperSessionOpDetail');
+  const statsNode=document.getElementById('scalperSessionOpStats');
+  const line=document.getElementById('scalperSessionOpProgressLine');
+  const fill=document.getElementById('scalperSessionOpFill');
+  const pct=document.getElementById('scalperSessionOpPct');
+  const dismiss=document.getElementById('scalperSessionOpDismiss');
+  if(icon) icon.textContent=state==='working'?'⏳':state==='success'?'✅':state==='error'?'❌':state==='warning'?'⚠️':'ℹ️';
+  if(titleNode) titleNode.textContent=title||'Session operation';
+  if(detailNode) detailNode.textContent=detail||'';
+  if(statsNode) statsNode.textContent=stats||'';
+  if(line) line.style.display=progress===null||progress===undefined?'none':'flex';
+  if(fill) fill.style.width=String(Math.max(0,Math.min(100,Number(progress)||0)))+'%';
+  if(pct) pct.textContent=progress===null||progress===undefined?'':Math.round(Math.max(0,Math.min(100,Number(progress)||0)))+'%';
+  if(dismiss) dismiss.style.display=state==='working'?'none':'inline-block';
+}
+function dismissScalperSessionOperationStatus(){
+  if(_scalperSessionOperationActive) return;
+  const panel=document.getElementById('scalperSessionOperationStatus');
+  if(panel) panel.style.display='none';
+}
+function prepareScalperSessionImport(){
+  if(_scalperSessionOperationActive){
+    showScalperSessionOperationStatus('warning','Another session operation is running',
+      'Wait for the current import or deletion to finish before starting another operation.',null,'');
+    return;
+  }
+  showScalperSessionOperationStatus('info','Choose your session CSV',
+    'Select a .csv or .csv.gz file. Upload progress and the import result will appear here, outside the hidden tabs.',0,
+    'No file has been uploaded yet.');
+  const input=document.getElementById('scalperSessionImportInput');
+  if(!input){
+    showScalperSessionOperationStatus('error','Import control unavailable',
+      'The CSV file input is missing from this page. Reload the site and try again.',null,'');
+    return;
+  }
+  input.value='';
+  input.oncancel=function(){
+    if(!_scalperSessionOperationActive) showScalperSessionOperationStatus('info','CSV selection cancelled','No file was uploaded.',null,'');
+  };
+  input.click();
+}
+function _scalperSessionBytes(n){
+  const bytes=Math.max(0,Number(n)||0);
+  if(bytes<1024) return bytes+' B';
+  if(bytes<1024*1024) return (bytes/1024).toFixed(1)+' KB';
+  if(bytes<1024*1024*1024) return (bytes/(1024*1024)).toFixed(2)+' MB';
+  return (bytes/(1024*1024*1024)).toFixed(2)+' GB';
+}
+function _scalperUploadSessionCsv(file){
+  return new Promise((resolve,reject)=>{
+    const fd=new FormData();
+    fd.append('session',file,file.name);
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/scalper/live/import/session',true);
+    xhr.upload.onprogress=function(event){
+      if(!event.lengthComputable) return;
+      const ratio=event.total?event.loaded/event.total:0;
+      showScalperSessionOperationStatus('working','Uploading CSV to MarketPredictor',
+        file.name+' · '+_scalperSessionBytes(event.loaded)+' of '+_scalperSessionBytes(event.total)+' transferred.',
+        Math.round(ratio*18),
+        'File size: '+_scalperSessionBytes(file.size)+'. The server validates and imports it after upload finishes.');
+    };
+    xhr.onload=function(){
+      let data={};
+      try{data=JSON.parse(xhr.responseText||'{}');}
+      catch(parseError){reject(new Error('Server returned a non-JSON response (HTTP '+xhr.status+'). Check Render logs.'));return;}
+      if(xhr.status<200||xhr.status>=300||data.ok===false){
+        reject(new Error(data.error||('Upload request failed with HTTP '+xhr.status+'.')));
+        return;
       }
+      resolve(data);
+    };
+    xhr.onerror=function(){reject(new Error('Network error while uploading the CSV. The server may not have received the complete file.'));};
+    xhr.onabort=function(){reject(new Error('CSV upload was cancelled.'));};
+    xhr.ontimeout=function(){reject(new Error('CSV upload timed out. Retry only after checking session history; identical rows are deduplicated.'));};
+    xhr.timeout=0;
+    xhr.send(fd);
+  });
+}
+async function importScalperSessionData(file) {
+  if(!file){
+    if(!_scalperSessionOperationActive) showScalperSessionOperationStatus('info','Choose your session CSV','Select a .csv or .csv.gz file to begin.',null,'');
+    return;
+  }
+  if(_scalperSessionOperationActive){
+    showScalperSessionOperationStatus('warning','Another session operation is running',
+      'The selected file was not submitted. Wait for the current operation to finish.',null,'');
+    return;
+  }
+  const input=document.getElementById('scalperSessionImportInput');
+  _scalperSessionOperationActive='import';
+  showScalperSessionOperationStatus('working','Starting CSV upload',
+    file.name+' · '+_scalperSessionBytes(file.size)+' · Sending file to the server…',0,'Upload and import progress are shown here.');
+  let jobId=null, pollTimer=null, pollFailures=0, terminal=false;
+  try{
+    const accepted=await _scalperUploadSessionCsv(file);
+    jobId=accepted.job_id;
+    if(!jobId) throw new Error('The server accepted the request but did not return an import job ID. Check Render logs before retrying.');
+    showScalperSessionOperationStatus('working','CSV uploaded — validating file',
+      file.name+' has reached the server. Checking headers, timestamps, symbols, date boundaries and row count…',20,
+      'Server job: '+jobId+'. Existing database records are preserved.');
+    const poll=async()=>{
+      if(terminal) return;
+      try{
+        const response=await fetch('/api/scalper/live/import/status/'+encodeURIComponent(jobId),{cache:'no-store',credentials:'same-origin'});
+        let job={};
+        try{job=await response.json();}catch(parseError){throw new Error('Import-status endpoint returned invalid JSON (HTTP '+response.status+').');}
+        if(!response.ok||job.ok===false) throw new Error(job.error||('Import status request failed with HTTP '+response.status+'.'));
+        pollFailures=0;
+        const meta=job.metadata||{};
+        const label=job.label||job.source_label||meta.label||file.name;
+        const rowsSeen=Number(job.rows_seen||0);
+        const totalRows=Number(meta.row_count||job.total_rows||0);
+        const inserted=Number(job.rows_inserted||0);
+        const addedThisAttempt=Number(job.rows_inserted_this_attempt||0);
+        const duplicates=Number(job.duplicates||0);
+        const conflicts=Number(job.conflicts||0);
+        const state=String(job.status||'running').toLowerCase();
+        const stage=String(job.stage||'Processing CSV');
+        const isDone=state==='completed';
+        const isError=state==='error';
+        let title='Importing session snapshots';
+        if(state==='queued') title='CSV uploaded — waiting for importer';
+        else if(/inspect|validat/i.test(stage)) title='Validating CSV session';
+        else if(/resume/i.test(stage)) title='Resuming previous import';
+        else if(/duplicate file/i.test(stage)) title='Checking existing import record';
+        else if(isDone) title='Session import completed';
+        else if(isError) title='Session import failed';
+        const br=String.fromCharCode(10);
+        let details=label+br+'Stage: '+stage;
+        if(isDone) details=(job.message||'Import completed.')+br+label;
+        if(isError) details=(job.error||job.message||'The importer reported an error.')+br+label;
+        let pct=Number(job.progress_pct);
+        if(!Number.isFinite(pct)) pct=25;
+        pct=isDone?100:isError?100:Math.max(20,Math.min(98,pct));
+        const stats='Rows read: '+rowsSeen.toLocaleString('en-IN')+(totalRows?' / '+totalRows.toLocaleString('en-IN'):' (counting/validating)')+
+          ' · Rows stored for this session: '+inserted.toLocaleString('en-IN')+
+          ' · Newly added this attempt: '+addedThisAttempt.toLocaleString('en-IN')+
+          ' · Duplicates skipped: '+duplicates.toLocaleString('en-IN')+
+          ' · Conflicts: '+conflicts.toLocaleString('en-IN');
+        showScalperSessionOperationStatus(isError?'error':isDone?'success':'working',title,details,pct,stats);
+        if(isDone||isError){
+          terminal=true;
+          if(pollTimer) clearTimeout(pollTimer);
+          _scalperSessionOperationActive=null;
+          if(input) input.value='';
+          if(_scalperSessionsLoadInFlight){try{await _scalperSessionsLoadInFlight;}catch(waitError){}}
+          await loadScalperSessions(true);
+          showToast('UltraScalp session import',job.message||job.error||'Import finished.',isDone?'success':'error');
+          return;
+        }
+      }catch(e){
+        pollFailures++;
+        if(pollFailures>=6){
+          terminal=true;
+          _scalperSessionOperationActive=null;
+          if(input) input.value='';
+          showScalperSessionOperationStatus('error','Could not verify import status',
+            'The file was uploaded and a job was created, but the status endpoint failed repeatedly. Do not assume the import failed or re-upload immediately. Error: '+(e.message||String(e)),
+            null,'Job ID: '+(jobId||'not returned')+'. Check Render logs and Session History first.');
+          showToast('UltraScalp session import','Status checks failed. Verify the job/session before retrying.', 'error');
+          return;
+        }
+        showScalperSessionOperationStatus('working','Checking import status…',
+          'The CSV has been submitted; the browser is retrying the status request ('+pollFailures+'/6). Last error: '+(e.message||String(e)),
+          null,'Job ID: '+(jobId||'not returned')+'.');
+      }
+      pollTimer=setTimeout(poll,1000);
     };
     await poll();
-    importScalperSessionData._timer=setInterval(()=>poll().catch(e=>{clearInterval(importScalperSessionData._timer);importScalperSessionData._timer=null;if(panel)panel.textContent='Session import failed: '+(e.message||e);}),1000);
-  }catch(e){if(panel){panel.style.display='block';panel.textContent='Session import failed: '+(e.message||e);}showToast('UltraScalp session import',e.message||String(e),'error');}
-  finally{const input=document.getElementById('scalperSessionImportInput');if(input)input.value='';}
+  }catch(e){
+    terminal=true;
+    _scalperSessionOperationActive=null;
+    if(pollTimer) clearTimeout(pollTimer);
+    if(input) input.value='';
+    showScalperSessionOperationStatus('error','CSV upload/import could not start',
+      (e.message||String(e))+' No success is reported unless the server confirms it.',100,
+      'File: '+file.name+' · '+_scalperSessionBytes(file.size)+(jobId?' · Job ID: '+jobId:''));
+    showToast('UltraScalp session import',e.message||String(e),'error');
+  }
 }
 
 async function stopIntradayReplayById(runId) {
