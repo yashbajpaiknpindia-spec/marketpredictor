@@ -846,12 +846,19 @@ class LivePaperWorker:
                 l2_agreement_events += 1
             if result.get("direction"):
                 signal_events += 1
-            self._record_snapshot(symbol, code, now, ltp, volume, depth, result, settings)
+            was_open_position = symbol in self._positions
             self._manage_position(symbol, code, now, ltp, depth, settings, result)
             accepted, reject_reason = self._maybe_enter(symbol, code, now, ltp, depth, result, settings)
             if not accepted and reject_reason:
                 entry_rejects += 1
                 entry_reject_reason_counts[reject_reason] = entry_reject_reason_counts.get(reject_reason, 0) + 1
+            # Persist the final entry-gate decision alongside scoring diagnostics so
+            # missed opportunities can be reconstructed after the session ends.
+            self._record_snapshot(
+                symbol, code, now, ltp, volume, depth, result, settings,
+                entry_reject_reason=reject_reason if not accepted else None,
+                was_open_position=was_open_position,
+            )
             processed += 1
 
         persist_started = time.monotonic()
@@ -1082,11 +1089,22 @@ class LivePaperWorker:
                 self.state["last_message"] = "V12 model unavailable; entries are fail-closed until the artifact loads."
         return result
 
-    def _record_snapshot(self, symbol: str, code: str, now: datetime, ltp: float, volume: float, depth: Dict[str, Any], result: Dict[str, Any], settings: Dict[str, Any]) -> None:
-        interesting = bool(result.get("direction")) or symbol in self._positions
+    def _record_snapshot(
+        self, symbol: str, code: str, now: datetime, ltp: float, volume: float,
+        depth: Dict[str, Any], result: Dict[str, Any], settings: Dict[str, Any],
+        entry_reject_reason: Optional[str] = None, was_open_position: bool = False,
+    ) -> None:
+        interesting = bool(result.get("direction")) or was_open_position or symbol in self._positions
         compact = bool(settings.get("store_signal_snapshots_only"))
         if compact and not interesting:
             return
+        score_reason = str(result.get("rejection_reason") or "").strip()
+        reason_parts = [score_reason] if score_reason else []
+        if entry_reject_reason:
+            entry_reason = f"entry_gate:{entry_reject_reason}"
+            if entry_reason not in reason_parts:
+                reason_parts.append(entry_reason)
+        persisted_rejection_reason = ";".join(reason_parts) or None
         raw = {
             "session_id": self.state.get("session_id"),
             "captured_at": now.replace(tzinfo=None),
@@ -1120,7 +1138,7 @@ class LivePaperWorker:
             "edge_pass": bool(result.get("edge_pass")),
             "score_pass": bool(result.get("score_pass")),
             "l2_pass": bool(result.get("l2_pass")),
-            "rejection_reason": result.get("rejection_reason"),
+            "rejection_reason": persisted_rejection_reason,
             "expected_move_pct": float(result.get("expected_move_pct") or 0.0),
             "remaining_edge_pct": float(result.get("remaining_edge_pct") or 0.0),
             "l2_mode": "5_level_displayed_depth",
