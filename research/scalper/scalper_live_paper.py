@@ -976,6 +976,7 @@ class LivePaperWorker:
         should_check = (
             not hasattr(self, "_v12_model_checked_path")
             or self._v12_model_checked_path != path
+            or (model_enabled and getattr(self, "_v12_model_status", {}).get("status") == "disabled")
             or (time.monotonic() - float(getattr(self, "_v12_model_last_attempt_monotonic", 0.0)) >= 30.0
                 and getattr(self, "_v12_model_status", {}).get("status") != "loaded")
         )
