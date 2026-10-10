@@ -1294,7 +1294,9 @@ class LivePaperWorker:
                 # A transient book reversal cannot kill a valid momentum trade.
                 # Only a persistent reversal while still net-negative can do so.
                 if streak >= persistence and net_now <= 0.0:
-                    exit_reason = "V12_THESIS_FAIL_L5_FLIP_PERSISTENT"
+                    # This streak is based on microprice_edge_pct, not raw L5 imbalance.
+                    # Name the exit honestly so downstream audits do not misattribute it.
+                    exit_reason = "V12_THESIS_FAIL_MICROPRICE_REVERSAL_PERSISTENT"
         age_min = (now.replace(tzinfo=None) - pos["entry_time"]).total_seconds() / 60.0
         safety_timeout = float(settings.get("v12_safety_timeout_minutes", settings.get("max_hold_minutes", 30))) if settings.get("v12_mode", True) else float(settings.get("max_hold_minutes", 10))
         if exit_reason is None and age_min >= safety_timeout:
@@ -1334,11 +1336,17 @@ class LivePaperWorker:
                 "profit_lock_trail_gross_pct": float(settings.get("v12_profit_lock_trail_gross_pct", 0.30)),
             },
         })
+        if exit_reason == "V12_THESIS_FAIL_MICROPRICE_REVERSAL_PERSISTENT":
+            closed["metadata"]["exit_trigger_source"] = "microprice_edge_pct"
+            closed["metadata"]["exit_trigger_rule"] = "persistent_opposite_microprice_while_net_negative"
         self.persist_trade(closed)
         self._positions.pop(symbol, None)
         with self.lock:
             self.state["realized_net_pnl_inr"] = float(self.state.get("realized_net_pnl_inr") or 0.0) + net_inr
             self.state["open_positions"] = len(self._positions)
+            exit_counts = dict(self.state.get("exit_reason_counts") or {})
+            exit_counts[exit_reason] = int(exit_counts.get(exit_reason, 0)) + 1
+            self.state["exit_reason_counts"] = dict(sorted(exit_counts.items()))
 
     def _flush_snapshots(self) -> None:
         if not self._snapshot_buffer:
