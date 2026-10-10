@@ -429,6 +429,8 @@ class LivePaperWorker:
             "v12_model_artifact_path": None,
             "v12_model_load_error": None,
             "entry_reject_reasons": {},
+            "exit_precheck_count": 0,
+            "last_exit_precheck_ms": 0.0,
         }
         self._session = None
         self._symbols: Dict[str, str] = {}
@@ -673,6 +675,30 @@ class LivePaperWorker:
                     break
         return candidates, mapped, failures
 
+    def _precheck_open_positions(self, quote_by_code: Dict[str, Any], settings: Dict[str, Any], now: datetime) -> None:
+        """Apply price/timeout exits before scanning and scoring the full universe.
+
+        This does not make the provider fetch itself faster; it prevents expensive
+        per-symbol feature work from delaying risk checks after quotes have arrived.
+        """
+        started = time.monotonic()
+        checked = 0
+        for symbol in list(self._positions):
+            pos = self._positions.get(symbol)
+            if not pos:
+                continue
+            code = str(pos.get("scrip_code") or self._symbols.get(symbol) or "")
+            quote = quote_by_code.get(code) or {}
+            ltp = _num(quote.get("live_price"))
+            if not math.isfinite(ltp) or ltp <= 0:
+                continue
+            self._manage_position(symbol, code, now, ltp, self._prev_depth.get(symbol) or {}, settings, None)
+            checked += 1
+        elapsed_ms = (time.monotonic() - started) * 1000.0
+        with self.lock:
+            self.state["exit_precheck_count"] = int(self.state.get("exit_precheck_count") or 0) + checked
+            self.state["last_exit_precheck_ms"] = round(elapsed_ms, 2)
+
     def _poll_once(self, settings: Dict[str, Any], now: datetime) -> None:
         # Close every open paper position before the exchange session boundary,
         # even if the provider returns no quote in this cycle. This prevents a
@@ -728,6 +754,9 @@ class LivePaperWorker:
             self.state["last_quote_requested"] = len(codes)
             self.state["last_quote_returned"] = len(quote_by_code)
             self.state["last_quote_coverage_pct"] = round((len(quote_by_code) / len(codes) * 100.0), 2) if codes else 0.0
+        # Run hard target/stop/time checks for existing positions immediately after
+        # the bulk quote response, before per-symbol feature scoring and snapshot work.
+        self._precheck_open_positions(quote_by_code, settings, now)
         current_returns: List[float] = []
         market_ltp = 0.0
         if self.fetch_market_ltp is not None:
@@ -754,7 +783,10 @@ class LivePaperWorker:
         entry_reject_reason_counts: Dict[str, int] = {}
         invalid_data = 0
         unusual_data = []
-        for symbol, code in self._symbols.items():
+        symbol_items = list(self._symbols.items())
+        # Existing positions get the earliest feature-based thesis/lock checks too.
+        symbol_items.sort(key=lambda item: item[0] not in self._positions)
+        for symbol, code in symbol_items:
             q = quote_by_code.get(code) or {}
             if not q:
                 continue
