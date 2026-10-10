@@ -1,5 +1,6 @@
 """Regression tests for V12 model-load safety in the live-paper worker."""
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from research.scalper.scalper_live_paper import LivePaperWorker
@@ -54,6 +55,19 @@ class V12ModelLoadSafetyTests(unittest.TestCase):
             # A bad artifact must not cause a load exception for every symbol.
             worker._score({}, None, settings)
             self.assertEqual(load.call_count, 1)
+
+    def test_open_positions_are_prechecked_from_fresh_bulk_quotes(self):
+        worker = make_worker()
+        worker._symbols = {"ABC": "123"}
+        worker._positions = {"ABC": {"ticker": "ABC", "scrip_code": "123"}}
+        worker._prev_depth = {}
+        now = datetime(2026, 10, 10, 10, 0, 0)
+        settings = {"protection_pct": 0.18}
+        with patch.object(worker, "_manage_position") as manage:
+            worker._precheck_open_positions({"123": {"live_price": 100.0}}, settings, now)
+        manage.assert_called_once_with("ABC", "123", now, 100.0, {}, settings, None)
+        self.assertEqual(worker.state["exit_precheck_count"], 1)
+        self.assertGreaterEqual(worker.state["last_exit_precheck_ms"], 0.0)
 
     def test_loaded_model_is_reported_as_loaded(self):
         worker = make_worker()
