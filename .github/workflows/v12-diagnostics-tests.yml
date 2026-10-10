@@ -1,0 +1,24 @@
+name: V12 runtime diagnostics tests
+
+on:
+  push:
+    branches:
+      - "research/v12-observability-safety-2026-10-10"
+  pull_request:
+    paths:
+      - "research/scalper/scalper_live_paper.py"
+      - "tests/test_v12_model_runtime_status.py"
+      - ".github/workflows/v12-diagnostics-tests.yml"
+
+jobs:
+  runtime-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal runtime dependencies
+        run: python -m pip install --upgrade pip numpy pandas scikit-learn
+      - name: Run isolated runtime diagnostics tests
+        run: python -m unittest tests.test_v12_model_runtime_status -v
