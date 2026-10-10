@@ -1,0 +1,24 @@
+name: UltraScalp V12 safety tests
+
+on:
+  push:
+    branches:
+      - "research/v12-opportunity-capture-audit"
+  pull_request:
+    paths:
+      - "research/scalper/**"
+      - ".github/workflows/scalper-safety-tests.yml"
+
+jobs:
+  v12-model-load-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install minimal test dependencies
+        run: python -m pip install --upgrade pip numpy pandas joblib
+      - name: Run V12 model-load safety regression tests
+        run: python -m unittest research.scalper.test_v12_model_load_safety -v
