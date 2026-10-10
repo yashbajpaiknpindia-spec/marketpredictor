@@ -69,6 +69,28 @@ class V12ModelLoadSafetyTests(unittest.TestCase):
         self.assertEqual(worker.state["exit_precheck_count"], 1)
         self.assertGreaterEqual(worker.state["last_exit_precheck_ms"], 0.0)
 
+    def test_snapshot_persists_entry_gate_rejection_reason(self):
+        worker = make_worker()
+        worker._record_snapshot(
+            "ABC", "123", datetime(2026, 10, 10, 10, 0, 0), 100.0, 10.0,
+            {
+                "bids": [], "asks": [], "spread_pct": 0.01,
+                "imbalance_l1": 0.0, "imbalance_l5": -0.2,
+                "microprice": 100.0, "microprice_edge_pct": 0.01,
+                "book_pressure": 0.0, "depth_total_qty": 100.0,
+                "depth_valid": True, "depth_endpoint_ok": True,
+            },
+            {"direction": 0, "side": "NONE", "rejection_reason": "remaining_edge"},
+            {"store_signal_snapshots_only": True},
+            entry_reject_reason="entry_confirmation_pending",
+            was_open_position=True,
+        )
+        saved = worker._snapshot_buffer[-1]
+        self.assertEqual(
+            saved["rejection_reason"],
+            "remaining_edge;entry_gate:entry_confirmation_pending",
+        )
+
     def test_loaded_model_is_reported_as_loaded(self):
         worker = make_worker()
         settings = {
