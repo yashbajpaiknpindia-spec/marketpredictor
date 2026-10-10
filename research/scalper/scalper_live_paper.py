@@ -360,6 +360,13 @@ class LivePaperWorker:
         self.persist_trade = persist_trade
         self.load_open_trades = load_open_trades
         self.fetch_market_ltp = fetch_market_ltp
+        # Cache model-load failures as well as successes. A missing artifact must not
+        # trigger hundreds of filesystem exceptions per universe scan.
+        self._v12_model_profile = None
+        self._v12_model_profile_path = None
+        self._v12_model_load_error = None
+        self._v12_model_last_attempt = 0.0
+        self._v12_model_retry_seconds = 30.0
 
         self.stop_event = threading.Event()
         self.lock = threading.RLock()
@@ -418,6 +425,12 @@ class LivePaperWorker:
             "capital_utilization_inr": 0.0,
             "economic_lock_activated": 0,
             "economic_lock_exits": 0,
+            "v12_model_load_status": "NOT_CHECKED",
+            "v12_model_artifact_path": None,
+            "v12_model_load_error": None,
+            "entry_reject_reasons": {},
+            "exit_precheck_count": 0,
+            "last_exit_precheck_ms": 0.0,
         }
         self._session = None
         self._symbols: Dict[str, str] = {}
@@ -662,6 +675,30 @@ class LivePaperWorker:
                     break
         return candidates, mapped, failures
 
+    def _precheck_open_positions(self, quote_by_code: Dict[str, Any], settings: Dict[str, Any], now: datetime) -> None:
+        """Apply price/timeout exits before scanning and scoring the full universe.
+
+        This does not make the provider fetch itself faster; it prevents expensive
+        per-symbol feature work from delaying risk checks after quotes have arrived.
+        """
+        started = time.monotonic()
+        checked = 0
+        for symbol in list(self._positions):
+            pos = self._positions.get(symbol)
+            if not pos:
+                continue
+            code = str(pos.get("scrip_code") or self._symbols.get(symbol) or "")
+            quote = quote_by_code.get(code) or {}
+            ltp = _num(quote.get("live_price"))
+            if not math.isfinite(ltp) or ltp <= 0:
+                continue
+            self._manage_position(symbol, code, now, ltp, self._prev_depth.get(symbol) or {}, settings, None)
+            checked += 1
+        elapsed_ms = (time.monotonic() - started) * 1000.0
+        with self.lock:
+            self.state["exit_precheck_count"] = int(self.state.get("exit_precheck_count") or 0) + checked
+            self.state["last_exit_precheck_ms"] = round(elapsed_ms, 2)
+
     def _poll_once(self, settings: Dict[str, Any], now: datetime) -> None:
         # Close every open paper position before the exchange session boundary,
         # even if the provider returns no quote in this cycle. This prevents a
@@ -717,6 +754,9 @@ class LivePaperWorker:
             self.state["last_quote_requested"] = len(codes)
             self.state["last_quote_returned"] = len(quote_by_code)
             self.state["last_quote_coverage_pct"] = round((len(quote_by_code) / len(codes) * 100.0), 2) if codes else 0.0
+        # Run hard target/stop/time checks for existing positions immediately after
+        # the bulk quote response, before per-symbol feature scoring and snapshot work.
+        self._precheck_open_positions(quote_by_code, settings, now)
         current_returns: List[float] = []
         market_ltp = 0.0
         if self.fetch_market_ltp is not None:
@@ -740,9 +780,13 @@ class LivePaperWorker:
         score_pass_events = 0
         l2_agreement_events = 0
         entry_rejects = 0
+        entry_reject_reason_counts: Dict[str, int] = {}
         invalid_data = 0
         unusual_data = []
-        for symbol, code in self._symbols.items():
+        symbol_items = list(self._symbols.items())
+        # Existing positions get the earliest feature-based thesis/lock checks too.
+        symbol_items.sort(key=lambda item: item[0] not in self._positions)
+        for symbol, code in symbol_items:
             q = quote_by_code.get(code) or {}
             if not q:
                 continue
@@ -802,11 +846,19 @@ class LivePaperWorker:
                 l2_agreement_events += 1
             if result.get("direction"):
                 signal_events += 1
-            self._record_snapshot(symbol, code, now, ltp, volume, depth, result, settings)
+            was_open_position = symbol in self._positions
             self._manage_position(symbol, code, now, ltp, depth, settings, result)
             accepted, reject_reason = self._maybe_enter(symbol, code, now, ltp, depth, result, settings)
-            if not accepted and reject_reason:
+            if not accepted and reject_reason and reject_reason not in {"already_open", "market_window", "no_final_signal"}:
                 entry_rejects += 1
+                entry_reject_reason_counts[reject_reason] = entry_reject_reason_counts.get(reject_reason, 0) + 1
+            # Persist the final entry-gate decision alongside scoring diagnostics so
+            # missed opportunities can be reconstructed after the session ends.
+            self._record_snapshot(
+                symbol, code, now, ltp, volume, depth, result, settings,
+                entry_reject_reason=reject_reason if not accepted else None,
+                was_open_position=was_open_position,
+            )
             processed += 1
 
         persist_started = time.monotonic()
@@ -824,6 +876,10 @@ class LivePaperWorker:
             self.state["score_pass_count"] = int(self.state.get("score_pass_count") or 0) + score_pass_events
             self.state["l2_agreement_count"] = int(self.state.get("l2_agreement_count") or 0) + l2_agreement_events
             self.state["entry_reject_count"] = int(self.state.get("entry_reject_count") or 0) + entry_rejects
+            reject_totals = dict(self.state.get("entry_reject_reasons") or {})
+            for reason, count in entry_reject_reason_counts.items():
+                reject_totals[reason] = int(reject_totals.get(reason) or 0) + int(count)
+            self.state["entry_reject_reasons"] = reject_totals
             self.state["depth_valid_count"] = int(self.state.get("depth_valid_count") or 0) + depth_valid
             self.state["depth_zero_count"] = int(self.state.get("depth_zero_count") or 0) + depth_zero
             total_depth_samples = self.state["depth_valid_count"] + self.state["depth_zero_count"]
@@ -859,8 +915,11 @@ class LivePaperWorker:
                 "require_calibration": bool(settings.get("v12_require_calibration", False)),
                 "calibration_loaded": bool(settings.get("v12_calibration_profile")),
             }
-            self.state["last_message"] = (f"Captured {processed} instruments; {len(self._positions)} paper positions open." if processed else
-                                          f"Polled {len(self._symbols)} mapped instruments but received 0 quotes (provider/auth problem) - see the L5 panel.")
+            base_message = (f"Captured {processed} instruments; {len(self._positions)} paper positions open." if processed else
+                            f"Polled {len(self._symbols)} mapped instruments but received 0 quotes (provider/auth problem) - see the L5 panel.")
+            if self.state.get("v12_model_load_status") == "UNAVAILABLE":
+                base_message += " V12 model unavailable: new entries are blocked until the artifact loads."
+            self.state["last_message"] = base_message
         self._heartbeat()
 
     def _update_vwap(self, symbol: str, depth: Dict[str, Any], ltp: float, volume: float) -> None:
@@ -954,15 +1013,27 @@ class LivePaperWorker:
 
     def _score(self, features: Dict[str, Any], now: datetime, settings: Dict[str, Any]) -> Dict[str, Any]:
         model_profile = None
-        if settings.get("v12_model_enabled", True):
-            path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
-            try:
-                if not hasattr(self, "_v12_model_profile_path") or self._v12_model_profile_path != path:
+        model_enabled = bool(settings.get("v12_model_enabled", True))
+        path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
+        if model_enabled:
+            # Retry a failed load at most once every 30 seconds, not once per ticker.
+            if self._v12_model_profile_path != path:
+                self._v12_model_profile = None
+                self._v12_model_profile_path = path
+                self._v12_model_load_error = None
+                self._v12_model_last_attempt = 0.0
+            if self._v12_model_profile is None and (time.monotonic() - self._v12_model_last_attempt >= self._v12_model_retry_seconds):
+                self._v12_model_last_attempt = time.monotonic()
+                try:
                     self._v12_model_profile = joblib.load(path)
-                    self._v12_model_profile_path = path
-                model_profile = getattr(self, "_v12_model_profile", None)
-            except Exception:
-                model_profile = None
+                    self._v12_model_load_error = None
+                except Exception as exc:
+                    self._v12_model_profile = None
+                    self._v12_model_load_error = f"{type(exc).__name__}: {str(exc)[:350]}"
+            model_profile = self._v12_model_profile
+            model_status = "LOADED" if model_profile is not None else "UNAVAILABLE"
+        else:
+            model_status = "DISABLED"
         cfg = ScalperConfig(
             target_pct=_v12_gross_target_pct(settings) if settings.get("v12_mode", True) else float(settings.get("target_pct", 0.60)),
             protection_pct=float(settings.get("protection_pct", 0.18)),
@@ -998,13 +1069,42 @@ class LivePaperWorker:
         result["micro_signal"] = float(features.get("microprice_edge_pct", 0.0) or 0.0)
         result["l2_pass"] = True
         result["data_honesty"] = "5-level displayed depth; OFI is a proxy, not event-level order-flow imbalance."
+        result["v12_model_status"] = model_status
+        result["v12_model_artifact_path"] = path if model_enabled else None
+        if model_enabled and model_profile is None:
+            # Fail closed: do not silently trade the legacy heuristic while the UI/config
+            # says the learned V12 model is enabled. Keep the heuristic score in diagnostics.
+            result["direction"] = 0
+            result["side"] = "NONE"
+            existing_reason = str(result.get("rejection_reason") or "").strip()
+            result["rejection_reason"] = ",".join(x for x in (existing_reason, "model_unavailable") if x)
+        with self.lock:
+            old_status = self.state.get("v12_model_load_status")
+            old_error = self.state.get("v12_model_load_error")
+            new_error = self._v12_model_load_error if model_enabled else None
+            self.state["v12_model_load_status"] = model_status
+            self.state["v12_model_artifact_path"] = path if model_enabled else None
+            self.state["v12_model_load_error"] = new_error
+            if model_status == "UNAVAILABLE" and (old_status != model_status or old_error != new_error):
+                self.state["last_message"] = "V12 model unavailable; entries are fail-closed until the artifact loads."
         return result
 
-    def _record_snapshot(self, symbol: str, code: str, now: datetime, ltp: float, volume: float, depth: Dict[str, Any], result: Dict[str, Any], settings: Dict[str, Any]) -> None:
-        interesting = bool(result.get("direction")) or symbol in self._positions
+    def _record_snapshot(
+        self, symbol: str, code: str, now: datetime, ltp: float, volume: float,
+        depth: Dict[str, Any], result: Dict[str, Any], settings: Dict[str, Any],
+        entry_reject_reason: Optional[str] = None, was_open_position: bool = False,
+    ) -> None:
+        interesting = bool(result.get("direction")) or was_open_position or symbol in self._positions
         compact = bool(settings.get("store_signal_snapshots_only"))
         if compact and not interesting:
             return
+        score_reason = str(result.get("rejection_reason") or "").strip()
+        reason_parts = [score_reason] if score_reason else []
+        if entry_reject_reason:
+            entry_reason = f"entry_gate:{entry_reject_reason}"
+            if entry_reason not in reason_parts:
+                reason_parts.append(entry_reason)
+        persisted_rejection_reason = ";".join(reason_parts) or None
         raw = {
             "session_id": self.state.get("session_id"),
             "captured_at": now.replace(tzinfo=None),
@@ -1038,7 +1138,7 @@ class LivePaperWorker:
             "edge_pass": bool(result.get("edge_pass")),
             "score_pass": bool(result.get("score_pass")),
             "l2_pass": bool(result.get("l2_pass")),
-            "rejection_reason": result.get("rejection_reason"),
+            "rejection_reason": persisted_rejection_reason,
             "expected_move_pct": float(result.get("expected_move_pct") or 0.0),
             "remaining_edge_pct": float(result.get("remaining_edge_pct") or 0.0),
             "l2_mode": "5_level_displayed_depth",
