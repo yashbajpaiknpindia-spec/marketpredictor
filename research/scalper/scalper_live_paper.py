@@ -849,7 +849,7 @@ class LivePaperWorker:
             was_open_position = symbol in self._positions
             self._manage_position(symbol, code, now, ltp, depth, settings, result)
             accepted, reject_reason = self._maybe_enter(symbol, code, now, ltp, depth, result, settings)
-            if not accepted and reject_reason:
+            if not accepted and reject_reason and reject_reason not in {"already_open", "market_window", "no_final_signal"}:
                 entry_rejects += 1
                 entry_reject_reason_counts[reject_reason] = entry_reject_reason_counts.get(reject_reason, 0) + 1
             # Persist the final entry-gate decision alongside scoring diagnostics so
