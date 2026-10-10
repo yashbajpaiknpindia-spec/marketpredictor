@@ -1,0 +1,74 @@
+"""Regression tests for V12 model-load safety in the live-paper worker."""
+import unittest
+from unittest.mock import patch
+
+from research.scalper.scalper_live_paper import LivePaperWorker
+
+
+def make_worker():
+    return LivePaperWorker(
+        get_settings=lambda: {},
+        is_trading_day=lambda *_: True,
+        get_universe=lambda *_: [],
+        resolve_scrip=lambda symbol: symbol,
+        fetch_quotes=lambda *_: {},
+        create_session=lambda *_: 1,
+        update_session=lambda *_: None,
+        persist_snapshot_batch=lambda *_: None,
+        persist_trade=lambda *_: None,
+        load_open_trades=lambda: [],
+    )
+
+
+def fake_score_event(*_args, **_kwargs):
+    return {
+        "direction": 1,
+        "raw_direction": 1,
+        "side": "LONG",
+        "confidence": 90.0,
+        "rejection_reason": None,
+        "edge_pass": True,
+        "score_pass": True,
+        "l2_pass": True,
+        "micro_signal": 0.01,
+    }
+
+
+class V12ModelLoadSafetyTests(unittest.TestCase):
+    def test_enabled_but_missing_model_fails_closed_and_reports_reason(self):
+        worker = make_worker()
+        settings = {
+            "v12_model_enabled": True,
+            "v12_model_artifact_path": "/definitely/missing/v12-model.joblib",
+        }
+        with patch("research.scalper.scalper_live_paper.joblib.load", side_effect=FileNotFoundError("artifact missing")) as load, \
+             patch("research.scalper.scalper_live_paper.score_event", side_effect=fake_score_event):
+            result = worker._score({}, None, settings)
+            self.assertEqual(result["direction"], 0)
+            self.assertEqual(result["side"], "NONE")
+            self.assertIn("model_unavailable", result["rejection_reason"])
+            self.assertEqual(result["v12_model_status"], "UNAVAILABLE")
+            self.assertEqual(worker.state["v12_model_load_status"], "UNAVAILABLE")
+            self.assertIn("FileNotFoundError", worker.state["v12_model_load_error"])
+
+            # A bad artifact must not cause a load exception for every symbol.
+            worker._score({}, None, settings)
+            self.assertEqual(load.call_count, 1)
+
+    def test_loaded_model_is_reported_as_loaded(self):
+        worker = make_worker()
+        settings = {
+            "v12_model_enabled": True,
+            "v12_model_artifact_path": "/tmp/test-v12-model.joblib",
+        }
+        with patch("research.scalper.scalper_live_paper.joblib.load", return_value={"test": True}), \
+             patch("research.scalper.scalper_live_paper.score_event", side_effect=fake_score_event):
+            result = worker._score({}, None, settings)
+        self.assertEqual(result["direction"], 1)
+        self.assertEqual(result["v12_model_status"], "LOADED")
+        self.assertEqual(worker.state["v12_model_load_status"], "LOADED")
+        self.assertIsNone(worker.state["v12_model_load_error"])
+
+
+if __name__ == "__main__":
+    unittest.main()
