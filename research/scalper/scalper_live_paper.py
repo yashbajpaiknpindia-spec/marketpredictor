@@ -876,8 +876,11 @@ class LivePaperWorker:
                 "require_calibration": bool(settings.get("v12_require_calibration", False)),
                 "calibration_loaded": bool(settings.get("v12_calibration_profile")),
             }
-            self.state["last_message"] = (f"Captured {processed} instruments; {len(self._positions)} paper positions open." if processed else
-                                          f"Polled {len(self._symbols)} mapped instruments but received 0 quotes (provider/auth problem) - see the L5 panel.")
+            base_message = (f"Captured {processed} instruments; {len(self._positions)} paper positions open." if processed else
+                            f"Polled {len(self._symbols)} mapped instruments but received 0 quotes (provider/auth problem) - see the L5 panel.")
+            if self.state.get("v12_model_load_status") == "UNAVAILABLE":
+                base_message += " V12 model unavailable: new entries are blocked until the artifact loads."
+            self.state["last_message"] = base_message
         self._heartbeat()
 
     def _update_vwap(self, symbol: str, depth: Dict[str, Any], ltp: float, volume: float) -> None:
