@@ -360,6 +360,13 @@ class LivePaperWorker:
         self.persist_trade = persist_trade
         self.load_open_trades = load_open_trades
         self.fetch_market_ltp = fetch_market_ltp
+        # Cache model-load failures as well as successes. A missing artifact must not
+        # trigger hundreds of filesystem exceptions per universe scan.
+        self._v12_model_profile = None
+        self._v12_model_profile_path = None
+        self._v12_model_load_error = None
+        self._v12_model_last_attempt = 0.0
+        self._v12_model_retry_seconds = 30.0
 
         self.stop_event = threading.Event()
         self.lock = threading.RLock()
@@ -418,6 +425,10 @@ class LivePaperWorker:
             "capital_utilization_inr": 0.0,
             "economic_lock_activated": 0,
             "economic_lock_exits": 0,
+            "v12_model_load_status": "NOT_CHECKED",
+            "v12_model_artifact_path": None,
+            "v12_model_load_error": None,
+            "entry_reject_reasons": {},
         }
         self._session = None
         self._symbols: Dict[str, str] = {}
@@ -740,6 +751,7 @@ class LivePaperWorker:
         score_pass_events = 0
         l2_agreement_events = 0
         entry_rejects = 0
+        entry_reject_reason_counts: Dict[str, int] = {}
         invalid_data = 0
         unusual_data = []
         for symbol, code in self._symbols.items():
@@ -807,6 +819,7 @@ class LivePaperWorker:
             accepted, reject_reason = self._maybe_enter(symbol, code, now, ltp, depth, result, settings)
             if not accepted and reject_reason:
                 entry_rejects += 1
+                entry_reject_reason_counts[reject_reason] = entry_reject_reason_counts.get(reject_reason, 0) + 1
             processed += 1
 
         persist_started = time.monotonic()
@@ -824,6 +837,10 @@ class LivePaperWorker:
             self.state["score_pass_count"] = int(self.state.get("score_pass_count") or 0) + score_pass_events
             self.state["l2_agreement_count"] = int(self.state.get("l2_agreement_count") or 0) + l2_agreement_events
             self.state["entry_reject_count"] = int(self.state.get("entry_reject_count") or 0) + entry_rejects
+            reject_totals = dict(self.state.get("entry_reject_reasons") or {})
+            for reason, count in entry_reject_reason_counts.items():
+                reject_totals[reason] = int(reject_totals.get(reason) or 0) + int(count)
+            self.state["entry_reject_reasons"] = reject_totals
             self.state["depth_valid_count"] = int(self.state.get("depth_valid_count") or 0) + depth_valid
             self.state["depth_zero_count"] = int(self.state.get("depth_zero_count") or 0) + depth_zero
             total_depth_samples = self.state["depth_valid_count"] + self.state["depth_zero_count"]
@@ -954,15 +971,27 @@ class LivePaperWorker:
 
     def _score(self, features: Dict[str, Any], now: datetime, settings: Dict[str, Any]) -> Dict[str, Any]:
         model_profile = None
-        if settings.get("v12_model_enabled", True):
-            path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
-            try:
-                if not hasattr(self, "_v12_model_profile_path") or self._v12_model_profile_path != path:
+        model_enabled = bool(settings.get("v12_model_enabled", True))
+        path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
+        if model_enabled:
+            # Retry a failed load at most once every 30 seconds, not once per ticker.
+            if self._v12_model_profile_path != path:
+                self._v12_model_profile = None
+                self._v12_model_profile_path = path
+                self._v12_model_load_error = None
+                self._v12_model_last_attempt = 0.0
+            if self._v12_model_profile is None and (time.monotonic() - self._v12_model_last_attempt >= self._v12_model_retry_seconds):
+                self._v12_model_last_attempt = time.monotonic()
+                try:
                     self._v12_model_profile = joblib.load(path)
-                    self._v12_model_profile_path = path
-                model_profile = getattr(self, "_v12_model_profile", None)
-            except Exception:
-                model_profile = None
+                    self._v12_model_load_error = None
+                except Exception as exc:
+                    self._v12_model_profile = None
+                    self._v12_model_load_error = f"{type(exc).__name__}: {str(exc)[:350]}"
+            model_profile = self._v12_model_profile
+            model_status = "LOADED" if model_profile is not None else "UNAVAILABLE"
+        else:
+            model_status = "DISABLED"
         cfg = ScalperConfig(
             target_pct=_v12_gross_target_pct(settings) if settings.get("v12_mode", True) else float(settings.get("target_pct", 0.60)),
             protection_pct=float(settings.get("protection_pct", 0.18)),
@@ -998,6 +1027,24 @@ class LivePaperWorker:
         result["micro_signal"] = float(features.get("microprice_edge_pct", 0.0) or 0.0)
         result["l2_pass"] = True
         result["data_honesty"] = "5-level displayed depth; OFI is a proxy, not event-level order-flow imbalance."
+        result["v12_model_status"] = model_status
+        result["v12_model_artifact_path"] = path if model_enabled else None
+        if model_enabled and model_profile is None:
+            # Fail closed: do not silently trade the legacy heuristic while the UI/config
+            # says the learned V12 model is enabled. Keep the heuristic score in diagnostics.
+            result["direction"] = 0
+            result["side"] = "NONE"
+            existing_reason = str(result.get("rejection_reason") or "").strip()
+            result["rejection_reason"] = ",".join(x for x in (existing_reason, "model_unavailable") if x)
+        with self.lock:
+            old_status = self.state.get("v12_model_load_status")
+            old_error = self.state.get("v12_model_load_error")
+            new_error = self._v12_model_load_error if model_enabled else None
+            self.state["v12_model_load_status"] = model_status
+            self.state["v12_model_artifact_path"] = path if model_enabled else None
+            self.state["v12_model_load_error"] = new_error
+            if model_status == "UNAVAILABLE" and (old_status != model_status or old_error != new_error):
+                self.state["last_message"] = "V12 model unavailable; entries are fail-closed until the artifact loads."
         return result
 
     def _record_snapshot(self, symbol: str, code: str, now: datetime, ltp: float, volume: float, depth: Dict[str, Any], result: Dict[str, Any], settings: Dict[str, Any]) -> None:
