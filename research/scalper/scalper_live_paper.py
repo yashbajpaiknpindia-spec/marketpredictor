@@ -15,6 +15,8 @@ from collections import defaultdict, deque
 from dataclasses import asdict
 from datetime import datetime, timedelta, time as dtime
 import math
+import os
+import hashlib
 import threading
 import time
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -418,6 +420,14 @@ class LivePaperWorker:
             "capital_utilization_inr": 0.0,
             "economic_lock_activated": 0,
             "economic_lock_exits": 0,
+            "v12_model_status": "NOT_CHECKED",
+            "v12_model_active": False,
+            "v12_model_path": None,
+            "v12_model_sha256": None,
+            "v12_model_error": None,
+            "v12_model_last_checked_at": None,
+            "entry_rejection_reasons": {},
+            "last_poll_entry_rejections": {},
         }
         self._session = None
         self._symbols: Dict[str, str] = {}
@@ -740,6 +750,7 @@ class LivePaperWorker:
         score_pass_events = 0
         l2_agreement_events = 0
         entry_rejects = 0
+        poll_rejection_reasons: Dict[str, int] = {}
         invalid_data = 0
         unusual_data = []
         for symbol, code in self._symbols.items():
@@ -807,6 +818,7 @@ class LivePaperWorker:
             accepted, reject_reason = self._maybe_enter(symbol, code, now, ltp, depth, result, settings)
             if not accepted and reject_reason:
                 entry_rejects += 1
+                poll_rejection_reasons[str(reject_reason)] = poll_rejection_reasons.get(str(reject_reason), 0) + 1
             processed += 1
 
         persist_started = time.monotonic()
@@ -824,6 +836,11 @@ class LivePaperWorker:
             self.state["score_pass_count"] = int(self.state.get("score_pass_count") or 0) + score_pass_events
             self.state["l2_agreement_count"] = int(self.state.get("l2_agreement_count") or 0) + l2_agreement_events
             self.state["entry_reject_count"] = int(self.state.get("entry_reject_count") or 0) + entry_rejects
+            self.state["last_poll_entry_rejections"] = dict(sorted(poll_rejection_reasons.items(), key=lambda item: (-item[1], item[0])))
+            cumulative_rejections = dict(self.state.get("entry_rejection_reasons") or {})
+            for reason, count in poll_rejection_reasons.items():
+                cumulative_rejections[reason] = int(cumulative_rejections.get(reason, 0)) + int(count)
+            self.state["entry_rejection_reasons"] = dict(sorted(cumulative_rejections.items(), key=lambda item: (-item[1], item[0])))
             self.state["depth_valid_count"] = int(self.state.get("depth_valid_count") or 0) + depth_valid
             self.state["depth_zero_count"] = int(self.state.get("depth_zero_count") or 0) + depth_zero
             total_depth_samples = self.state["depth_valid_count"] + self.state["depth_zero_count"]
@@ -954,15 +971,46 @@ class LivePaperWorker:
 
     def _score(self, features: Dict[str, Any], now: datetime, settings: Dict[str, Any]) -> Dict[str, Any]:
         model_profile = None
-        if settings.get("v12_model_enabled", True):
-            path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
+        model_enabled = bool(settings.get("v12_model_enabled", True))
+        path = str(settings.get("v12_model_artifact_path") or "research/scalper/artifacts/v12_direction_edge_production.joblib")
+        should_check = (
+            not hasattr(self, "_v12_model_checked_path")
+            or self._v12_model_checked_path != path
+            or (time.monotonic() - float(getattr(self, "_v12_model_last_attempt_monotonic", 0.0)) >= 30.0
+                and getattr(self, "_v12_model_status", {}).get("status") != "loaded")
+        )
+        if not model_enabled:
+            self._v12_model_profile = None
+            self._v12_model_checked_path = path
+            self._v12_model_status = {"status": "disabled", "path": path, "sha256": None, "error": None}
+        elif should_check:
+            self._v12_model_last_attempt_monotonic = time.monotonic()
+            self._v12_model_checked_path = path
             try:
-                if not hasattr(self, "_v12_model_profile_path") or self._v12_model_profile_path != path:
-                    self._v12_model_profile = joblib.load(path)
-                    self._v12_model_profile_path = path
-                model_profile = getattr(self, "_v12_model_profile", None)
-            except Exception:
-                model_profile = None
+                if not os.path.isfile(path):
+                    raise FileNotFoundError(f"Model artifact not found at runtime: {path}")
+                digest = hashlib.sha256()
+                with open(path, "rb") as artifact_file:
+                    for chunk in iter(lambda: artifact_file.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                loaded_profile = joblib.load(path)
+                if loaded_profile is None:
+                    raise ValueError("joblib.load returned an empty model profile")
+                self._v12_model_profile = loaded_profile
+                self._v12_model_profile_path = path
+                self._v12_model_status = {"status": "loaded", "path": path, "sha256": digest.hexdigest(), "error": None}
+            except Exception as exc:
+                self._v12_model_profile = None
+                self._v12_model_status = {"status": "fallback_heuristic", "path": path, "sha256": None, "error": f"{type(exc).__name__}: {str(exc)[:240]}"}
+        model_profile = getattr(self, "_v12_model_profile", None) if model_enabled else None
+        status = getattr(self, "_v12_model_status", {"status": "not_checked", "path": path, "sha256": None, "error": None})
+        with self.lock:
+            self.state["v12_model_status"] = status.get("status", "unknown")
+            self.state["v12_model_active"] = bool(model_enabled and model_profile is not None)
+            self.state["v12_model_path"] = status.get("path")
+            self.state["v12_model_sha256"] = status.get("sha256")
+            self.state["v12_model_error"] = status.get("error")
+            self.state["v12_model_last_checked_at"] = now.isoformat()
         cfg = ScalperConfig(
             target_pct=_v12_gross_target_pct(settings) if settings.get("v12_mode", True) else float(settings.get("target_pct", 0.60)),
             protection_pct=float(settings.get("protection_pct", 0.18)),
@@ -993,6 +1041,10 @@ class LivePaperWorker:
         micro_signal = 0.45 * float(features.get("ofi", 0.0)) + 0.35 * float(features.get("imbalance_l5", 0.0)) + 0.20 * float(features.get("microprice_edge", 0.0))
         result["l2_levels"] = 5
         result["l2_mode"] = "displayed_5_level_depth"
+        result["v12_model_status"] = status.get("status", "unknown")
+        result["v12_model_active"] = bool(model_enabled and model_profile is not None)
+        result["v12_model_artifact_sha256"] = status.get("sha256")
+        result["v12_model_load_error"] = status.get("error")
         # For the live edge gate and existing position management, micro_signal is
         # the directly observed microprice edge, not the legacy weighted L2 blend.
         result["micro_signal"] = float(features.get("microprice_edge_pct", 0.0) or 0.0)
