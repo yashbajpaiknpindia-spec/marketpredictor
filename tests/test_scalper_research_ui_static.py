@@ -23,9 +23,12 @@ def test_scalper_priority_page_and_eye_menu():
     assert 'id="scLivePollLatency"' in html
     assert 'id="scLiveProviderLatency"' in html
     assert 'id="scLiveDiagnostics"' in html
-    assert 'Run full synthetic market lab' not in html
-    assert 'id="synL5TestTrades"' not in html
-    assert 'api/scalper/synthetic/start' not in html
+    synthetic_start = html.index('<div id="syntheticLabView"')
+    scalper_block = html[html.index('<div id="scalperView"'):synthetic_start]
+    assert 'Run full synthetic market lab' not in scalper_block
+    assert 'id="synL5TestTrades"' not in scalper_block
+    assert 'api/scalper/synthetic/start' not in scalper_block
+    assert 'api/scalper/synthetic/start' in html
     assert "api/scalper/research" in html
     assert "AI Copilot" in html
     assert "Persistent state:" in html
