@@ -865,6 +865,32 @@ def _sample_evenly(rows: Sequence[tuple], limit: int) -> List[tuple]:
     return [rows[int(i)] for i in positions]
 
 
+def _select_development_descriptors(descriptors: Sequence[tuple], regimes: Sequence[str], limit: int) -> List[tuple]:
+    """Sample train and validation streams separately for every regime.
+
+    Session IDs are assigned split-by-session; selection must preserve that
+    split, otherwise a prefix sample can silently contain train-only streams.
+    """
+    selected: List[tuple] = []
+    per_regime = max(4, int(limit))
+    train_limit = max(1, int(round(per_regime * 0.75)))
+    validation_limit = max(1, per_regime - train_limit)
+    for regime in regimes:
+        train_rows = [d for d in descriptors if d[0] == regime and d[3] == "train"]
+        validation_rows = [d for d in descriptors if d[0] == regime and d[3] == "validation"]
+        if not train_rows or not validation_rows:
+            raise ValueError(f"Regime {regime} lacks distinct train and validation sessions")
+        selected.extend(_sample_evenly(train_rows, train_limit))
+        selected.extend(_sample_evenly(validation_rows, validation_limit))
+    return selected
+
+
+def _stable_stream_seed(base_seed: int, session_id: int, symbol: str) -> int:
+    """Stable across process restarts and unique to a symbol/session pair."""
+    material = f"{int(base_seed)}|{int(session_id)}|{str(symbol)}".encode("utf-8")
+    return int.from_bytes(hashlib.sha256(material).digest()[:8], "big")
+
+
 def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str], None]] = None) -> Dict[str, Any]:
     """Run the lab without materialising the entire synthetic market in RAM.
 
@@ -919,20 +945,11 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
     # bounded deterministically per regime so a 150-stock universe does not turn
     # the web service into a multi-million-row Python object factory. The bound is
     # applied only to train/validation streams, never to blind-test coverage.
-    dev_descriptors = []
-    per_regime_dev = max(4, int(cfg.max_development_streams_per_regime))
-    # Reserve a guaranteed slice for validation within every regime. The previous
-    # rows[:limit] selection could take only train streams (session IDs are ordered
-    # by split), leaving validation empty and silently skipping threshold selection.
-    for regime in regimes:
-        train_rows = [d for d in descriptors if d[0] == regime and d[3] == "train"]
-        validation_rows = [d for d in descriptors if d[0] == regime and d[3] == "validation"]
-        if not train_rows or not validation_rows:
-            raise ValueError(f"Regime {regime} lacks distinct train and validation sessions")
-        train_limit = max(1, int(round(per_regime_dev * 0.75)))
-        validation_limit = max(1, per_regime_dev - train_limit)
-        dev_descriptors.extend(_sample_evenly(train_rows, train_limit))
-        dev_descriptors.extend(_sample_evenly(validation_rows, validation_limit))
+    # Deterministic, split-stratified sampling keeps model fitting bounded while
+    # guaranteeing validation streams exist separately from training sessions.
+    dev_descriptors = _select_development_descriptors(
+        descriptors, regimes, cfg.max_development_streams_per_regime
+    )
     dev_set = set(dev_descriptors)
     train_frames: List[pd.DataFrame] = []
     valid_frames: List[pd.DataFrame] = []
@@ -947,8 +964,7 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
         symbol = str(active_symbols[stock_idx])
         symbol_digest = hashlib.sha256(symbol.encode("utf-8")).digest()
         symbol_code = int.from_bytes(symbol_digest[:4], "big")
-        seed_material = f"{int(cfg.seed)}|{int(session_id)}|{symbol}".encode("utf-8")
-        seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:8], "big")
+        seed = _stable_stream_seed(cfg.seed, session_id, symbol)
         stream_cfg = SyntheticConfig(**{
             **asdict(cfg),
             "seed": seed,
