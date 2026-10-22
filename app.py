@@ -468,10 +468,10 @@ def scalper_synthetic_start_endpoint():
             'entry_slippage_pct','adverse_selection_pct','max_spread_pct','future_horizon_bars',
             'train_fraction','validation_fraction','include_no_edge','tune_thresholds_on_validation',
             'min_validation_trades','stock_count','universe_mode','stock_symbols','bar_interval_seconds',
-            'event_probability','spoof_probability','shock_probability'
+            'coverage_batch','coverage_batch_size','event_probability','spoof_probability','shock_probability'
         )
         allowed = {k: payload[k] for k in allowed_keys if k in payload}
-        for k in ('sessions_per_regime','bars_per_session','seed','max_hold_bars','latency_bars','future_horizon_bars','min_validation_trades','stock_count','bar_interval_seconds'):
+        for k in ('sessions_per_regime','bars_per_session','seed','max_hold_bars','latency_bars','future_horizon_bars','min_validation_trades','stock_count','bar_interval_seconds','coverage_batch','coverage_batch_size'):
             if k in allowed: allowed[k] = int(allowed[k])
         for k in ('min_net_edge_pct','min_probability','protection_pct','round_trip_cost_pct','entry_slippage_pct','adverse_selection_pct','max_spread_pct','train_fraction','validation_fraction','event_probability','spoof_probability','shock_probability'):
             if k in allowed: allowed[k] = float(allowed[k])
@@ -493,7 +493,13 @@ def scalper_synthetic_start_endpoint():
             allowed['universe_mode'] = 'midcap150'
             allowed['stock_symbols'] = symbols
             allowed['stock_count'] = 150
-        return _scalper_json_response(start_scan(allowed))
+            # Exactly 50 resolved constituents per run keeps peak memory bounded.
+            # The UI runs batches 0/1/2 sequentially for full 150-stock coverage.
+            allowed['coverage_batch'] = max(0, min(2, int(allowed.get('coverage_batch', 0))))
+            allowed['coverage_batch_size'] = 50
+        state = start_scan(allowed)
+        state.setdefault('evidence_class', 'SYNTHETIC_L5_CAUSAL_MARKET_LAB_V3')
+        return _scalper_json_response(state)
     except Exception as exc:
         app.logger.exception('scalper_synthetic_start failed')
         return _scalper_json_response({'ok': False, 'error': str(exc)}, 400)

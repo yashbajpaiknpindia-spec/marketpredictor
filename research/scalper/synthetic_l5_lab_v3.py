@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 import math
 import os
 import json
+import hashlib
 import threading
 import time
 
@@ -641,6 +642,30 @@ def _feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df[list(FEATURES)].replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
 
+def _execution_pnl_pct(
+    entry_mid_px: float,
+    exit_mid_px: float,
+    side: int,
+    entry_spread_pct: float,
+    exit_spread_pct: float,
+    cfg: SyntheticConfig,
+) -> Tuple[float, float]:
+    """Return raw directional mid-price move and net return in percentage points.
+
+    Round-trip friction is charged once, observed spread is charged half at entry
+    and half at exit, and round-trip slippage/adverse-selection estimates are
+    charged once. This keeps the execution accounting consistent with the
+    candidate gate and makes the net metric comparable across spread regimes.
+    """
+    if not math.isfinite(entry_mid_px) or not math.isfinite(exit_mid_px) or entry_mid_px <= 0:
+        return 0.0, -float(cfg.round_trip_cost_pct)
+    gross = int(side) * ((float(exit_mid_px) / float(entry_mid_px)) - 1.0) * 100.0
+    spread_cost = 0.5 * (max(0.0, float(entry_spread_pct)) + max(0.0, float(exit_spread_pct)))
+    execution_cost = spread_cost + max(0.0, float(cfg.entry_slippage_pct)) + max(0.0, float(cfg.adverse_selection_pct))
+    net = gross - max(0.0, float(cfg.round_trip_cost_pct)) - execution_cost
+    return float(gross), float(net)
+
+
 def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, total_bars: int) -> Dict[str, Any]:
     if trades.empty:
         return {
@@ -648,6 +673,8 @@ def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, t
             "win_rate_pct": 0.0,
             "avg_net_pct": 0.0,
             "sum_net_pct": 0.0,
+            "net_profit_pct_points": 0.0,
+            "net_loss_pct_points": 0.0,
             "profit_factor": None,
             "max_drawdown_pct_points": 0.0,
             "avg_hold_bars": 0.0,
@@ -673,6 +700,8 @@ def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, t
         "win_rate_pct": float((net > 0).mean() * 100.0),
         "avg_net_pct": float(net.mean()),
         "sum_net_pct": float(net.sum()),
+        "net_profit_pct_points": wins,
+        "net_loss_pct_points": abs(losses),
         "profit_factor": float(wins / abs(losses)) if losses else None,
         "max_drawdown_pct_points": float(abs(dd.min())) if len(dd) else 0.0,
         "avg_hold_bars": float(trades["bars"].mean()),
@@ -733,8 +762,10 @@ def _simulate(
                 if i <= int(open_trade["entry_i"]):
                     continue
                 side = int(open_trade["side"])
-                gross_now = side * ((ltp[i] / open_trade["entry_px"]) - 1.0) * 100.0
-                net_now = gross_now - cfg.round_trip_cost_pct
+                gross_now, net_now = _execution_pnl_pct(
+                    float(open_trade["entry_mid_px"]), float(ltp[i]), side,
+                    float(open_trade["entry_spread_pct"]), float(spread[i]), cfg
+                )
                 bars = i - int(open_trade["entry_i"])
                 if net_now <= -cfg.protection_pct or side * preds[i] <= 0.0 or bars >= cfg.max_hold_bars:
                     reason = "PROTECTION" if net_now <= -cfg.protection_pct else "EDGE_GONE" if side * preds[i] <= 0 else "TIME_EXIT"
@@ -750,14 +781,21 @@ def _simulate(
             if spread[i] <= cfg.max_spread_pct and expected_net >= min_net_edge_pct and p_dir >= min_probability:
                 attempts += 1
                 entry_i = min(i + max(0, int(latency_bars)), len(g) - 1)
-                exec_spread = spread[entry_i]
-                entry_px = ltp[entry_i] * (1.0 + direction * (exec_spread / 200.0 + cfg.entry_slippage_pct / 100.0 + cfg.adverse_selection_pct / 100.0))
-                open_trade = {"side": direction, "entry_px": entry_px, "entry_i": entry_i}
+                # Store the observed mid and spread at actual entry. Execution
+                # costs are charged consistently when the position is closed.
+                open_trade = {
+                    "side": direction,
+                    "entry_mid_px": float(ltp[entry_i]),
+                    "entry_spread_pct": float(spread[entry_i]),
+                    "entry_i": entry_i,
+                }
         if open_trade is not None:
             i = len(g) - 1
             side = int(open_trade["side"])
-            gross_now = side * ((ltp[i] / open_trade["entry_px"]) - 1.0) * 100.0
-            net_now = gross_now - cfg.round_trip_cost_pct
+            gross_now, net_now = _execution_pnl_pct(
+                float(open_trade["entry_mid_px"]), float(ltp[i]), side,
+                float(open_trade["entry_spread_pct"]), float(spread[i]), cfg
+            )
             trades.append({"session_id": int(session_id), "regime": regime, "side": side, "net_pct": float(net_now), "gross_pct": float(gross_now), "bars": int(i - int(open_trade["entry_i"])), "reason": "SESSION_END"})
 
     t = pd.DataFrame(trades)
@@ -817,6 +855,42 @@ def _latency_robustness(test: pd.DataFrame, model: SyntheticL5Model, cfg: Synthe
     return out
 
 
+def _sample_evenly(rows: Sequence[tuple], limit: int) -> List[tuple]:
+    """Deterministically sample across sessions rather than favoring the first session."""
+    if not rows or limit <= 0:
+        return []
+    if len(rows) <= limit:
+        return list(rows)
+    positions = np.linspace(0, len(rows) - 1, num=limit, dtype=int)
+    return [rows[int(i)] for i in positions]
+
+
+def _select_development_descriptors(descriptors: Sequence[tuple], regimes: Sequence[str], limit: int) -> List[tuple]:
+    """Sample train and validation streams separately for every regime.
+
+    Session IDs are assigned split-by-session; selection must preserve that
+    split, otherwise a prefix sample can silently contain train-only streams.
+    """
+    selected: List[tuple] = []
+    per_regime = max(4, int(limit))
+    train_limit = max(1, int(round(per_regime * 0.75)))
+    validation_limit = max(1, per_regime - train_limit)
+    for regime in regimes:
+        train_rows = [d for d in descriptors if d[0] == regime and d[3] == "train"]
+        validation_rows = [d for d in descriptors if d[0] == regime and d[3] == "validation"]
+        if not train_rows or not validation_rows:
+            raise ValueError(f"Regime {regime} lacks distinct train and validation sessions")
+        selected.extend(_sample_evenly(train_rows, train_limit))
+        selected.extend(_sample_evenly(validation_rows, validation_limit))
+    return selected
+
+
+def _stable_stream_seed(base_seed: int, session_id: int, symbol: str) -> int:
+    """Stable across process restarts and unique to a symbol/session pair."""
+    material = f"{int(base_seed)}|{int(session_id)}|{str(symbol)}".encode("utf-8")
+    return int.from_bytes(hashlib.sha256(material).digest()[:8], "big")
+
+
 def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str], None]] = None) -> Dict[str, Any]:
     """Run the lab without materialising the entire synthetic market in RAM.
 
@@ -871,11 +945,11 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
     # bounded deterministically per regime so a 150-stock universe does not turn
     # the web service into a multi-million-row Python object factory. The bound is
     # applied only to train/validation streams, never to blind-test coverage.
-    dev_descriptors = []
-    per_regime_dev = max(3, int(cfg.max_development_streams_per_regime))
-    for regime in regimes:
-        rows = [d for d in descriptors if d[0] == regime and d[3] in ("train", "validation")]
-        dev_descriptors.extend(rows[:per_regime_dev])
+    # Deterministic, split-stratified sampling keeps model fitting bounded while
+    # guaranteeing validation streams exist separately from training sessions.
+    dev_descriptors = _select_development_descriptors(
+        descriptors, regimes, cfg.max_development_streams_per_regime
+    )
     dev_set = set(dev_descriptors)
     train_frames: List[pd.DataFrame] = []
     valid_frames: List[pd.DataFrame] = []
@@ -884,9 +958,25 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
     valid_rows_per_stream = 120
 
     def make_stream(regime: str, session_id: int, stock_idx: int) -> pd.DataFrame:
-        seed = int(cfg.seed + session_id * 7919 + stock_idx * 104729)
-        stream_cfg = SyntheticConfig(**{**asdict(cfg), "seed": seed, "stock_symbols": active_symbols, "stock_count": len(active_symbols), "session_start_price": float(80.0 + (stock_idx % 25) * 7.5), "sessions_per_regime": 1})
-        return generate_session(np.random.default_rng(seed), regime, session_id * 1000 + stock_idx, stream_cfg, active_symbols[stock_idx], stock_idx)
+        # A stable symbol-derived seed is essential for batching: local index 0 in
+        # each 50-stock batch must not regenerate the same paths for different names.
+        # Avoid Python's randomized built-in hash() so reruns remain deterministic.
+        symbol = str(active_symbols[stock_idx])
+        symbol_digest = hashlib.sha256(symbol.encode("utf-8")).digest()
+        symbol_code = int.from_bytes(symbol_digest[:4], "big")
+        seed = _stable_stream_seed(cfg.seed, session_id, symbol)
+        stream_cfg = SyntheticConfig(**{
+            **asdict(cfg),
+            "seed": seed,
+            "stock_symbols": active_symbols,
+            "stock_count": len(active_symbols),
+            "session_start_price": float(80.0 + (symbol_code % 25) * 7.5),
+            "sessions_per_regime": 1,
+        })
+        # Keep per-batch session IDs collision-free for pandas groupby; the
+        # stock-dependent randomness comes from the stable symbol seed above.
+        stream_id = session_id * 1000 + stock_idx
+        return generate_session(np.random.default_rng(seed), regime, stream_id, stream_cfg, symbol, stock_idx)
 
     for idx, (regime, session_id, stock_idx, split) in enumerate(descriptors, 1):
         if split == "test":
@@ -988,8 +1078,14 @@ def _aggregate_metrics(rows):
     win = float(np.average([float(x.get("win_rate_pct", 0.0)) for x in rows], weights=weights))
     avg = float(np.average([float(x.get("avg_net_pct", 0.0)) for x in rows], weights=weights))
     total = float(sum(float(x.get("sum_net_pct", 0.0)) for x in rows))
-    pfs = [x.get("profit_factor") for x in rows if x.get("profit_factor") is not None]
-    return {"trades": trades, "win_rate_pct": win, "avg_net_pct": avg, "sum_net_pct": total, "profit_factor": float(np.mean(pfs)) if pfs else None, "target_dependency": False}
+    gross_profit = float(sum(float(x.get("net_profit_pct_points", 0.0) or 0.0) for x in rows))
+    gross_loss = float(sum(float(x.get("net_loss_pct_points", 0.0) or 0.0) for x in rows))
+    pooled_pf = gross_profit / gross_loss if gross_loss > 0 else None
+    return {
+        "trades": trades, "win_rate_pct": win, "avg_net_pct": avg, "sum_net_pct": total,
+        "net_profit_pct_points": gross_profit, "net_loss_pct_points": gross_loss,
+        "profit_factor": pooled_pf, "target_dependency": False
+    }
 
 _STATE: Dict[str, Any] = {
     "running": False,
@@ -1014,7 +1110,7 @@ def start_scan(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         clean = {k: v for k, v in (config or {}).items() if k in allowed}
         # Basic API-side bounds to stop an accidental Render memory bomb.
         if "sessions_per_regime" in clean:
-            clean["sessions_per_regime"] = max(2, min(20, int(clean["sessions_per_regime"])))
+            clean["sessions_per_regime"] = max(3, min(20, int(clean["sessions_per_regime"])))
         if "bars_per_session" in clean:
             clean["bars_per_session"] = max(120, min(22500, int(clean["bars_per_session"])))
         if "levels" in clean:
