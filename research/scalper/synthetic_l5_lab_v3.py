@@ -1014,7 +1014,7 @@ def start_scan(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         clean = {k: v for k, v in (config or {}).items() if k in allowed}
         # Basic API-side bounds to stop an accidental Render memory bomb.
         if "sessions_per_regime" in clean:
-            clean["sessions_per_regime"] = max(2, min(20, int(clean["sessions_per_regime"])))
+            clean["sessions_per_regime"] = max(3, min(20, int(clean["sessions_per_regime"])))
         if "bars_per_session" in clean:
             clean["bars_per_session"] = max(120, min(22500, int(clean["bars_per_session"])))
         if "levels" in clean:
