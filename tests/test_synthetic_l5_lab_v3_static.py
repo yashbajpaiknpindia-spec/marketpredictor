@@ -33,3 +33,10 @@ def test_ui_exposes_cross_sectional_and_event_controls():
         assert element in UI
     assert 'L5 Causal Market Lab v3' in UI
     assert '30 regimes' in UI
+    assert 'id="tabSyntheticLab"' in UI
+    assert 'Run all 150 stocks' in UI
+    assert "coverage_batch_size" in APP
+
+
+def test_synthetic_lab_rejects_sessions_too_small_for_a_blind_split():
+    assert 'max(3, min(20, int(clean["sessions_per_regime"])))' in LAB
