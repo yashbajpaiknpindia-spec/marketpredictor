@@ -641,6 +641,30 @@ def _feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df[list(FEATURES)].replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
 
+def _execution_pnl_pct(
+    entry_mid_px: float,
+    exit_mid_px: float,
+    side: int,
+    entry_spread_pct: float,
+    exit_spread_pct: float,
+    cfg: SyntheticConfig,
+) -> Tuple[float, float]:
+    """Return raw directional mid-price move and net return in percentage points.
+
+    Round-trip friction is charged once, observed spread is charged half at entry
+    and half at exit, and round-trip slippage/adverse-selection estimates are
+    charged once. This keeps the execution accounting consistent with the
+    candidate gate and makes the net metric comparable across spread regimes.
+    """
+    if not math.isfinite(entry_mid_px) or not math.isfinite(exit_mid_px) or entry_mid_px <= 0:
+        return 0.0, -float(cfg.round_trip_cost_pct)
+    gross = int(side) * ((float(exit_mid_px) / float(entry_mid_px)) - 1.0) * 100.0
+    spread_cost = 0.5 * (max(0.0, float(entry_spread_pct)) + max(0.0, float(exit_spread_pct)))
+    execution_cost = spread_cost + max(0.0, float(cfg.entry_slippage_pct)) + max(0.0, float(cfg.adverse_selection_pct))
+    net = gross - max(0.0, float(cfg.round_trip_cost_pct)) - execution_cost
+    return float(gross), float(net)
+
+
 def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, total_bars: int) -> Dict[str, Any]:
     if trades.empty:
         return {
@@ -648,6 +672,8 @@ def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, t
             "win_rate_pct": 0.0,
             "avg_net_pct": 0.0,
             "sum_net_pct": 0.0,
+            "gross_profit_pct_points": 0.0,
+            "gross_loss_pct_points": 0.0,
             "profit_factor": None,
             "max_drawdown_pct_points": 0.0,
             "avg_hold_bars": 0.0,
@@ -673,6 +699,8 @@ def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, t
         "win_rate_pct": float((net > 0).mean() * 100.0),
         "avg_net_pct": float(net.mean()),
         "sum_net_pct": float(net.sum()),
+        "gross_profit_pct_points": wins,
+        "gross_loss_pct_points": abs(losses),
         "profit_factor": float(wins / abs(losses)) if losses else None,
         "max_drawdown_pct_points": float(abs(dd.min())) if len(dd) else 0.0,
         "avg_hold_bars": float(trades["bars"].mean()),
@@ -733,8 +761,10 @@ def _simulate(
                 if i <= int(open_trade["entry_i"]):
                     continue
                 side = int(open_trade["side"])
-                gross_now = side * ((ltp[i] / open_trade["entry_px"]) - 1.0) * 100.0
-                net_now = gross_now - cfg.round_trip_cost_pct
+                gross_now, net_now = _execution_pnl_pct(
+                    float(open_trade["entry_mid_px"]), float(ltp[i]), side,
+                    float(open_trade["entry_spread_pct"]), float(spread[i]), cfg
+                )
                 bars = i - int(open_trade["entry_i"])
                 if net_now <= -cfg.protection_pct or side * preds[i] <= 0.0 or bars >= cfg.max_hold_bars:
                     reason = "PROTECTION" if net_now <= -cfg.protection_pct else "EDGE_GONE" if side * preds[i] <= 0 else "TIME_EXIT"
@@ -750,14 +780,21 @@ def _simulate(
             if spread[i] <= cfg.max_spread_pct and expected_net >= min_net_edge_pct and p_dir >= min_probability:
                 attempts += 1
                 entry_i = min(i + max(0, int(latency_bars)), len(g) - 1)
-                exec_spread = spread[entry_i]
-                entry_px = ltp[entry_i] * (1.0 + direction * (exec_spread / 200.0 + cfg.entry_slippage_pct / 100.0 + cfg.adverse_selection_pct / 100.0))
-                open_trade = {"side": direction, "entry_px": entry_px, "entry_i": entry_i}
+                # Store the observed mid and spread at actual entry. Execution
+                # costs are charged consistently when the position is closed.
+                open_trade = {
+                    "side": direction,
+                    "entry_mid_px": float(ltp[entry_i]),
+                    "entry_spread_pct": float(spread[entry_i]),
+                    "entry_i": entry_i,
+                }
         if open_trade is not None:
             i = len(g) - 1
             side = int(open_trade["side"])
-            gross_now = side * ((ltp[i] / open_trade["entry_px"]) - 1.0) * 100.0
-            net_now = gross_now - cfg.round_trip_cost_pct
+            gross_now, net_now = _execution_pnl_pct(
+                float(open_trade["entry_mid_px"]), float(ltp[i]), side,
+                float(open_trade["entry_spread_pct"]), float(spread[i]), cfg
+            )
             trades.append({"session_id": int(session_id), "regime": regime, "side": side, "net_pct": float(net_now), "gross_pct": float(gross_now), "bars": int(i - int(open_trade["entry_i"])), "reason": "SESSION_END"})
 
     t = pd.DataFrame(trades)
@@ -988,8 +1025,14 @@ def _aggregate_metrics(rows):
     win = float(np.average([float(x.get("win_rate_pct", 0.0)) for x in rows], weights=weights))
     avg = float(np.average([float(x.get("avg_net_pct", 0.0)) for x in rows], weights=weights))
     total = float(sum(float(x.get("sum_net_pct", 0.0)) for x in rows))
-    pfs = [x.get("profit_factor") for x in rows if x.get("profit_factor") is not None]
-    return {"trades": trades, "win_rate_pct": win, "avg_net_pct": avg, "sum_net_pct": total, "profit_factor": float(np.mean(pfs)) if pfs else None, "target_dependency": False}
+    gross_profit = float(sum(float(x.get("gross_profit_pct_points", 0.0) or 0.0) for x in rows))
+    gross_loss = float(sum(float(x.get("gross_loss_pct_points", 0.0) or 0.0) for x in rows))
+    pooled_pf = gross_profit / gross_loss if gross_loss > 0 else None
+    return {
+        "trades": trades, "win_rate_pct": win, "avg_net_pct": avg, "sum_net_pct": total,
+        "gross_profit_pct_points": gross_profit, "gross_loss_pct_points": gross_loss,
+        "profit_factor": pooled_pf, "target_dependency": False
+    }
 
 _STATE: Dict[str, Any] = {
     "running": False,
