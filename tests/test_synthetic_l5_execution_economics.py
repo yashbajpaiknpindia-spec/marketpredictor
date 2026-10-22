@@ -8,6 +8,8 @@ from research.scalper.synthetic_l5_lab_v3 import (  # noqa: E402
     SyntheticConfig,
     _aggregate_metrics,
     _execution_pnl_pct,
+    _select_development_descriptors,
+    _stable_stream_seed,
 )
 
 
@@ -48,3 +50,32 @@ def test_pooled_profit_factor_uses_combined_winners_and_losers_not_average_strea
     combined = _aggregate_metrics([stream_a, stream_b])
     assert abs(combined["profit_factor"] - (1.1 / 2.5)) < 1e-9
     assert abs(combined["profit_factor"] - ((2.0 + 0.05) / 2.0)) > 0.1
+
+
+def test_development_sampling_always_has_train_and_validation_with_disjoint_sessions():
+    descriptors = []
+    for session_id in range(10):
+        split = "train" if session_id < 6 else "validation" if session_id < 8 else "test"
+        for stock_idx in range(50):
+            descriptors.append(("no_edge", session_id, stock_idx, split))
+
+    selected = _select_development_descriptors(descriptors, ["no_edge"], 60)
+    train = [row for row in selected if row[3] == "train"]
+    validation = [row for row in selected if row[3] == "validation"]
+    train_sessions = {row[1] for row in train}
+    validation_sessions = {row[1] for row in validation}
+
+    assert len(train) == 45
+    assert len(validation) == 15
+    assert train_sessions
+    assert validation_sessions
+    assert train_sessions.isdisjoint(validation_sessions)
+
+
+def test_symbol_seeds_are_repeatable_but_differ_across_coverage_batches():
+    seed_a = _stable_stream_seed(20261022, 12, "STOCK_A")
+    seed_a_repeat = _stable_stream_seed(20261022, 12, "STOCK_A")
+    seed_b = _stable_stream_seed(20261022, 12, "STOCK_B")
+
+    assert seed_a == seed_a_repeat
+    assert seed_a != seed_b
