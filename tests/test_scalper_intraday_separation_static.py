@@ -12,7 +12,10 @@ def test_scalper_and_intraday_are_separate_views():
     scalper_block = HTML[scalper_start:synthetic_start]
     synthetic_block = HTML[synthetic_start:intraday_start]
     assert 'L5 Causal Market Lab v3' in synthetic_block
-    assert 'api/scalper/synthetic/start' in synthetic_block
+    synthetic_js_start = HTML.index('let syntheticLabBatchResults')
+    synthetic_js_end = HTML.index('function switchTab(tab)', synthetic_js_start)
+    synthetic_js = HTML[synthetic_js_start:synthetic_js_end]
+    assert 'api/scalper/synthetic/start' in synthetic_js
     assert 'id="scalperRealTestsBody"' in scalper_block
     assert 'id="scLiveQualityStatus"' in scalper_block
     assert 'id="scLiveDiagnostics"' in scalper_block
