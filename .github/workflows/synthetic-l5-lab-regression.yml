@@ -1,0 +1,32 @@
+name: Synthetic L5 lab regression
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/synthetic-l5-lab-ui-20261022]
+
+jobs:
+  synthetic-lab-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Compile application and synthetic engine
+        run: python -m py_compile app.py indstocks_client.py research/scalper/synthetic_l5_lab_v3.py
+      - name: Run synthetic and UI separation regressions
+        run: >
+          pytest -q
+          tests/test_synthetic_l5_lab_v3_static.py
+          tests/test_scalper_research_ui_static.py
+          tests/test_scalper_intraday_separation_static.py
+          tests/test_scalper_depth_response_hardening.py
