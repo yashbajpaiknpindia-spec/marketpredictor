@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 import math
 import os
 import json
+import hashlib
 import threading
 import time
 
@@ -854,6 +855,16 @@ def _latency_robustness(test: pd.DataFrame, model: SyntheticL5Model, cfg: Synthe
     return out
 
 
+def _sample_evenly(rows: Sequence[tuple], limit: int) -> List[tuple]:
+    """Deterministically sample across sessions rather than favoring the first session."""
+    if not rows or limit <= 0:
+        return []
+    if len(rows) <= limit:
+        return list(rows)
+    positions = np.linspace(0, len(rows) - 1, num=limit, dtype=int)
+    return [rows[int(i)] for i in positions]
+
+
 def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str], None]] = None) -> Dict[str, Any]:
     """Run the lab without materialising the entire synthetic market in RAM.
 
@@ -909,10 +920,19 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
     # the web service into a multi-million-row Python object factory. The bound is
     # applied only to train/validation streams, never to blind-test coverage.
     dev_descriptors = []
-    per_regime_dev = max(3, int(cfg.max_development_streams_per_regime))
+    per_regime_dev = max(4, int(cfg.max_development_streams_per_regime))
+    # Reserve a guaranteed slice for validation within every regime. The previous
+    # rows[:limit] selection could take only train streams (session IDs are ordered
+    # by split), leaving validation empty and silently skipping threshold selection.
     for regime in regimes:
-        rows = [d for d in descriptors if d[0] == regime and d[3] in ("train", "validation")]
-        dev_descriptors.extend(rows[:per_regime_dev])
+        train_rows = [d for d in descriptors if d[0] == regime and d[3] == "train"]
+        validation_rows = [d for d in descriptors if d[0] == regime and d[3] == "validation"]
+        if not train_rows or not validation_rows:
+            raise ValueError(f"Regime {regime} lacks distinct train and validation sessions")
+        train_limit = max(1, int(round(per_regime_dev * 0.75)))
+        validation_limit = max(1, per_regime_dev - train_limit)
+        dev_descriptors.extend(_sample_evenly(train_rows, train_limit))
+        dev_descriptors.extend(_sample_evenly(validation_rows, validation_limit))
     dev_set = set(dev_descriptors)
     train_frames: List[pd.DataFrame] = []
     valid_frames: List[pd.DataFrame] = []
@@ -921,9 +941,24 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
     valid_rows_per_stream = 120
 
     def make_stream(regime: str, session_id: int, stock_idx: int) -> pd.DataFrame:
-        seed = int(cfg.seed + session_id * 7919 + stock_idx * 104729)
-        stream_cfg = SyntheticConfig(**{**asdict(cfg), "seed": seed, "stock_symbols": active_symbols, "stock_count": len(active_symbols), "session_start_price": float(80.0 + (stock_idx % 25) * 7.5), "sessions_per_regime": 1})
-        return generate_session(np.random.default_rng(seed), regime, session_id * 1000 + stock_idx, stream_cfg, active_symbols[stock_idx], stock_idx)
+        # A stable symbol-derived seed is essential for batching: local index 0 in
+        # each 50-stock batch must not regenerate the same paths for different names.
+        # Avoid Python's randomized built-in hash() so reruns remain deterministic.
+        symbol = str(active_symbols[stock_idx])
+        symbol_digest = hashlib.sha256(symbol.encode("utf-8")).digest()
+        symbol_code = int.from_bytes(symbol_digest[:4], "big")
+        seed_material = f"{int(cfg.seed)}|{int(session_id)}|{symbol}".encode("utf-8")
+        seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:8], "big")
+        stream_cfg = SyntheticConfig(**{
+            **asdict(cfg),
+            "seed": seed,
+            "stock_symbols": active_symbols,
+            "stock_count": len(active_symbols),
+            "session_start_price": float(80.0 + (symbol_code % 25) * 7.5),
+            "sessions_per_regime": 1,
+        })
+        stream_id = session_id * 1000 + (symbol_code % 1000)
+        return generate_session(np.random.default_rng(seed), regime, stream_id, stream_cfg, symbol, stock_idx)
 
     for idx, (regime, session_id, stock_idx, split) in enumerate(descriptors, 1):
         if split == "test":
