@@ -1023,7 +1023,7 @@ Automation is a risk-control and execution workflow, not an assurance of profit.
     <div>
       <div class="scalper-kicker">Isolated research workspace · no live orders</div>
       <h2>🧪 L5 Causal Market Lab v3</h2>
-      <p>Test the decision engine across 30 synthetic market regimes using observable LTP, volume, spread and five bid/ask levels. Hidden regime labels and future returns are evaluation-only, not model inputs. This lab runs independently of live INDstocks L5 capture.</p>
+      <p>Test the decision engine across all 30 regimes using observable LTP, volume, spread and five bid/ask levels. Hidden regime labels and future returns are evaluation-only, not model inputs. This lab runs independently of live INDstocks L5 capture.</p>
     </div>
   </div>
   <div class="trade-warning" style="margin-top:10px;">
@@ -3546,7 +3546,7 @@ async function synL5RunOneBatch(batch, ordinal, total) {
   const started = await response.json();
   if (!response.ok || started.ok === false) throw new Error(started.error || ('Synthetic start HTTP '+response.status));
   if (!started.running && started.error) throw new Error(started.error);
-  let state = started, polls = 0;
+  let state = await synL5FetchStatus(), polls = 0;
   while (state.running) {
     const localPct = Math.max(0,Math.min(100,Number(state.progress_pct)||0));
     synL5SetStatus('Batch '+ordinal+'/'+total+' · '+localPct+'% · '+(state.message||'running'),((ordinal-1)*100+localPct)/total);
