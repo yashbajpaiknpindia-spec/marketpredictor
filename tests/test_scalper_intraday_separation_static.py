@@ -6,9 +6,13 @@ HTML = (ROOT / 'templates' / 'index.html').read_text(encoding='utf-8')
 
 def test_scalper_and_intraday_are_separate_views():
     scalper_start = HTML.index('<div id="scalperView"')
+    synthetic_start = HTML.index('<div id="syntheticLabView"')
     intraday_start = HTML.index('<div id="intradayView"')
-    assert scalper_start < intraday_start
-    scalper_block = HTML[scalper_start:intraday_start]
+    assert scalper_start < synthetic_start < intraday_start
+    scalper_block = HTML[scalper_start:synthetic_start]
+    synthetic_block = HTML[synthetic_start:intraday_start]
+    assert 'L5 Causal Market Lab v3' in synthetic_block
+    assert 'api/scalper/synthetic/start' in synthetic_block
     assert 'id="scalperRealTestsBody"' in scalper_block
     assert 'id="scLiveQualityStatus"' in scalper_block
     assert 'id="scLiveDiagnostics"' in scalper_block
