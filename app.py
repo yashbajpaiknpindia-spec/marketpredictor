@@ -497,7 +497,9 @@ def scalper_synthetic_start_endpoint():
             # The UI runs batches 0/1/2 sequentially for full 150-stock coverage.
             allowed['coverage_batch'] = max(0, min(2, int(allowed.get('coverage_batch', 0))))
             allowed['coverage_batch_size'] = 50
-        return _scalper_json_response(start_scan(allowed))
+        state = start_scan(allowed)
+        state.setdefault('evidence_class', 'SYNTHETIC_L5_CAUSAL_MARKET_LAB_V3')
+        return _scalper_json_response(state)
     except Exception as exc:
         app.logger.exception('scalper_synthetic_start failed')
         return _scalper_json_response({'ok': False, 'error': str(exc)}, 400)
