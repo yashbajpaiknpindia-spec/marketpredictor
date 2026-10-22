@@ -27,6 +27,7 @@ jobs:
         run: >
           pytest -q
           tests/test_synthetic_l5_lab_v3_static.py
+          tests/test_synthetic_l5_execution_economics.py
           tests/test_scalper_research_ui_static.py
           tests/test_scalper_intraday_separation_static.py
           tests/test_scalper_depth_response_hardening.py
