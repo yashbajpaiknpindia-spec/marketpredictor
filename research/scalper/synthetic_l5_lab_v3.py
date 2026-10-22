@@ -957,7 +957,9 @@ def run_experiment(cfg: SyntheticConfig, progress: Optional[Callable[[int, str],
             "session_start_price": float(80.0 + (symbol_code % 25) * 7.5),
             "sessions_per_regime": 1,
         })
-        stream_id = session_id * 1000 + (symbol_code % 1000)
+        # Keep per-batch session IDs collision-free for pandas groupby; the
+        # stock-dependent randomness comes from the stable symbol seed above.
+        stream_id = session_id * 1000 + stock_idx
         return generate_session(np.random.default_rng(seed), regime, stream_id, stream_cfg, symbol, stock_idx)
 
     for idx, (regime, session_id, stock_idx, split) in enumerate(descriptors, 1):
