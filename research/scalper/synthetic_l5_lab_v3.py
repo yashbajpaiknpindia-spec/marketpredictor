@@ -672,8 +672,8 @@ def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, t
             "win_rate_pct": 0.0,
             "avg_net_pct": 0.0,
             "sum_net_pct": 0.0,
-            "gross_profit_pct_points": 0.0,
-            "gross_loss_pct_points": 0.0,
+            "net_profit_pct_points": 0.0,
+            "net_loss_pct_points": 0.0,
             "profit_factor": None,
             "max_drawdown_pct_points": 0.0,
             "avg_hold_bars": 0.0,
@@ -699,8 +699,8 @@ def _compute_metrics(trades: pd.DataFrame, attempted: int, eligible_bars: int, t
         "win_rate_pct": float((net > 0).mean() * 100.0),
         "avg_net_pct": float(net.mean()),
         "sum_net_pct": float(net.sum()),
-        "gross_profit_pct_points": wins,
-        "gross_loss_pct_points": abs(losses),
+        "net_profit_pct_points": wins,
+        "net_loss_pct_points": abs(losses),
         "profit_factor": float(wins / abs(losses)) if losses else None,
         "max_drawdown_pct_points": float(abs(dd.min())) if len(dd) else 0.0,
         "avg_hold_bars": float(trades["bars"].mean()),
@@ -1025,12 +1025,12 @@ def _aggregate_metrics(rows):
     win = float(np.average([float(x.get("win_rate_pct", 0.0)) for x in rows], weights=weights))
     avg = float(np.average([float(x.get("avg_net_pct", 0.0)) for x in rows], weights=weights))
     total = float(sum(float(x.get("sum_net_pct", 0.0)) for x in rows))
-    gross_profit = float(sum(float(x.get("gross_profit_pct_points", 0.0) or 0.0) for x in rows))
-    gross_loss = float(sum(float(x.get("gross_loss_pct_points", 0.0) or 0.0) for x in rows))
+    gross_profit = float(sum(float(x.get("net_profit_pct_points", 0.0) or 0.0) for x in rows))
+    gross_loss = float(sum(float(x.get("net_loss_pct_points", 0.0) or 0.0) for x in rows))
     pooled_pf = gross_profit / gross_loss if gross_loss > 0 else None
     return {
         "trades": trades, "win_rate_pct": win, "avg_net_pct": avg, "sum_net_pct": total,
-        "gross_profit_pct_points": gross_profit, "gross_loss_pct_points": gross_loss,
+        "net_profit_pct_points": gross_profit, "net_loss_pct_points": gross_loss,
         "profit_factor": pooled_pf, "target_dependency": False
     }
 
